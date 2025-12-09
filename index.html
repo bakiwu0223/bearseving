@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>小吉發大財 V14</title>
+    <title>小吉發大財 V16</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -53,9 +53,8 @@
         @keyframes fillBar { from { width: 0%; } }
         .progress-fill { animation: fillBar 1s ease-out forwards; }
         
-        /* Modal Styles */
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 999; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px); }
-        .modal-content { background: white; width: 100%; max-width: 320px; border-radius: 16px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: popUp 0.2s ease-out; }
+        .modal-content { background: white; width: 100%; max-width: 340px; border-radius: 16px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: popUp 0.2s ease-out; max-height: 85vh; overflow-y: auto; }
         @keyframes popUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
     </style>
 </head>
@@ -96,8 +95,8 @@
             { id: 'other', label: '其他', amount: '', icon: 'fa-basket-shopping' }
         ];
 
-        // --- 全用刪除確認 Modal ---
-        const ConfirmDeleteModal = ({ isOpen, onClose, onConfirm, title = "確定刪除嗎？" }) => {
+        // --- Modals ---
+        const ConfirmDeleteModal = ({ isOpen, onClose, onConfirm }) => {
             if (!isOpen) return null;
             return (
                 <div className="modal-overlay" onClick={onClose}>
@@ -106,38 +105,115 @@
                             <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3 text-red-500 text-xl">
                                 <i className="fa-solid fa-trash-can"></i>
                             </div>
-                            <h3 className="text-lg font-bold text-gray-800">{title}</h3>
-                            <p className="text-xs text-gray-400 mt-1">刪除後無法復原</p>
+                            <h3 className="text-lg font-bold text-gray-800">確定刪除嗎？</h3>
+                            <p className="text-xs text-gray-400 mt-1">此操作無法復原</p>
                         </div>
                         <div className="flex gap-3">
-                            <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl text-sm active:bg-gray-200">
-                                取消
-                            </button>
-                            <button onClick={onConfirm} className="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl text-sm shadow-md active:bg-red-600">
-                                確認刪除
-                            </button>
+                            <button onClick={onClose} type="button" className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl text-sm active:bg-gray-200">取消</button>
+                            <button onClick={onConfirm} type="button" className="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl text-sm shadow-md active:bg-red-600">確認刪除</button>
                         </div>
                     </div>
                 </div>
             );
         };
 
-        // --- 分類管理 Modal ---
+        const BackupModal = ({ isOpen, onClose }) => {
+            const [dataStr, setDataStr] = useState('');
+            const [status, setStatus] = useState('');
+
+            if (!isOpen) return null;
+
+            // 匯出功能
+            const handleExport = () => {
+                const data = {
+                    transactions: JSON.parse(localStorage.getItem('ji_transactions_v9') || '[]'),
+                    categories: JSON.parse(localStorage.getItem('ji_categories_v12') || JSON.stringify(INITIAL_CATEGORIES)),
+                    target: JSON.parse(localStorage.getItem('ji_target_v9') || '100000')
+                };
+                const code = JSON.stringify(data);
+                
+                // 複製到剪貼簿 (Mobile Compatible)
+                const textArea = document.createElement("textarea");
+                textArea.value = code;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    setStatus('已複製！請傳給另一台手機');
+                } catch (err) {
+                    setStatus('複製失敗，請手動全選複製');
+                }
+                document.body.removeChild(textArea);
+                setDataStr(code);
+            };
+
+            // 匯入功能
+            const handleImport = () => {
+                try {
+                    if (!dataStr) return;
+                    const data = JSON.parse(dataStr);
+                    if (data.transactions) {
+                        localStorage.setItem('ji_transactions_v9', JSON.stringify(data.transactions));
+                        if(data.categories) localStorage.setItem('ji_categories_v12', JSON.stringify(data.categories));
+                        if(data.target) localStorage.setItem('ji_target_v9', JSON.stringify(data.target));
+                        alert('還原成功！網頁將重新整理');
+                        window.location.reload();
+                    } else {
+                        setStatus('資料格式錯誤');
+                    }
+                } catch (e) {
+                    setStatus('資料無效，請確認複製完整');
+                }
+            };
+
+            return (
+                <div className="modal-overlay" onClick={onClose}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <div className="text-center mb-4">
+                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-500 text-xl"><i className="fa-solid fa-cloud-arrow-up"></i></div>
+                            <h3 className="text-lg font-bold text-gray-800">資料備份與同步</h3>
+                            <p className="text-xs text-gray-400 mt-1">因資料保存在手機內，換手機或同步需手動操作</p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase">我要傳送資料 (舊手機/來源)</h4>
+                                <button onClick={handleExport} className="w-full bg-morandi-main text-white py-2.5 rounded-lg text-sm font-bold shadow-sm active:opacity-90">
+                                    <i className="fa-regular fa-copy mr-1"></i> 複製資料碼
+                                </button>
+                            </div>
+
+                            <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase">我要接收資料 (新手機/接收)</h4>
+                                <textarea 
+                                    className="w-full h-20 bg-white border border-gray-200 rounded-lg p-2 text-[10px] text-gray-500 mb-2 outline-none resize-none"
+                                    placeholder="在此貼上資料碼..."
+                                    value={dataStr}
+                                    onChange={(e) => setDataStr(e.target.value)}
+                                ></textarea>
+                                <button onClick={handleImport} className="w-full bg-ios-blue text-white py-2.5 rounded-lg text-sm font-bold shadow-sm active:opacity-90">
+                                    <i className="fa-solid fa-file-import mr-1"></i> 還原資料
+                                </button>
+                            </div>
+                        </div>
+
+                        {status && <div className="mt-3 text-center text-xs font-bold text-ios-green animate-pulse">{status}</div>}
+                        <button onClick={onClose} className="w-full mt-4 text-gray-400 text-sm py-2">關閉</button>
+                    </div>
+                </div>
+            );
+        };
+
         const CategoryManagerModal = ({ isOpen, onClose, categories, setCategories }) => {
             const [newLabel, setNewLabel] = useState('');
             const [newAmount, setNewAmount] = useState('');
-            const [deleteTarget, setDeleteTarget] = useState(null); // 暫存要刪除的ID
+            const [deleteTarget, setDeleteTarget] = useState(null);
 
             if (!isOpen) return null;
 
             const handleAdd = () => {
                 if (!newLabel) return;
-                const newCat = {
-                    id: Date.now().toString(),
-                    label: newLabel,
-                    amount: newAmount,
-                    icon: 'fa-tag'
-                };
+                const newCat = { id: Date.now().toString(), label: newLabel, amount: newAmount, icon: 'fa-tag' };
                 setCategories([...categories, newCat]);
                 setNewLabel('');
                 setNewAmount('');
@@ -152,20 +228,19 @@
 
             return (
                 <div className="modal-overlay" onClick={onClose}>
-                    <div className="modal-content max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        {/* 這裡我們嵌套一個簡單的確認邏輯，避免視窗疊視窗太複雜 */}
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
                         {deleteTarget ? (
                             <div className="text-center py-4">
-                                <h3 className="font-bold text-red-500 mb-4">確定刪除此分類？</h3>
+                                <h3 className="font-bold text-red-500 mb-4">刪除「{categories.find(c=>c.id===deleteTarget)?.label}」？</h3>
                                 <div className="flex gap-2">
-                                    <button onClick={() => setDeleteTarget(null)} className="flex-1 bg-gray-200 py-2 rounded-lg text-sm font-bold">取消</button>
-                                    <button onClick={confirmDeleteCategory} className="flex-1 bg-red-500 text-white py-2 rounded-lg text-sm font-bold">刪除</button>
+                                    <button onClick={() => setDeleteTarget(null)} type="button" className="flex-1 bg-gray-200 py-2 rounded-lg text-sm font-bold">取消</button>
+                                    <button onClick={confirmDeleteCategory} type="button" className="flex-1 bg-red-500 text-white py-2 rounded-lg text-sm font-bold">刪除</button>
                                 </div>
                             </div>
                         ) : (
                             <>
                                 <h3 className="text-lg font-bold text-gray-800 mb-4">管理支出分類</h3>
-                                <div className="mb-4 space-y-2">
+                                <div className="mb-4 space-y-2 max-h-48 overflow-y-auto">
                                     {categories.map(cat => (
                                         <div key={cat.id} className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
                                             <div className="flex items-center gap-2">
@@ -174,9 +249,7 @@
                                                 {cat.amount && <span className="text-xs text-gray-400">(${cat.amount})</span>}
                                             </div>
                                             {cat.id !== 'other' && (
-                                                <button onClick={() => setDeleteTarget(cat.id)} className="w-8 h-8 flex items-center justify-center text-red-400 hover:text-red-600 bg-white rounded-full shadow-sm">
-                                                    <i className="fa-solid fa-trash-can"></i>
-                                                </button>
+                                                <button onClick={() => setDeleteTarget(cat.id)} type="button" className="w-8 h-8 flex items-center justify-center text-red-400 hover:text-red-600 bg-white rounded-full shadow-sm"><i className="fa-solid fa-trash-can"></i></button>
                                             )}
                                         </div>
                                     ))}
@@ -187,9 +260,9 @@
                                         <input type="text" className="input-field text-sm" placeholder="名稱" value={newLabel} onChange={e => setNewLabel(e.target.value)} />
                                         <input type="number" inputMode="decimal" className="input-field text-sm w-24" placeholder="預設$" value={newAmount} onChange={e => setNewAmount(e.target.value)} />
                                     </div>
-                                    <button onClick={handleAdd} className="w-full bg-morandi-main text-white rounded-lg py-2 font-bold text-sm shadow-sm">+ 新增</button>
+                                    <button onClick={handleAdd} type="button" className="w-full bg-morandi-main text-white rounded-lg py-2 font-bold text-sm shadow-sm">+ 新增</button>
                                 </div>
-                                <button onClick={onClose} className="w-full mt-4 text-gray-400 text-sm py-2">關閉</button>
+                                <button onClick={onClose} type="button" className="w-full mt-4 text-gray-400 text-sm py-2">關閉</button>
                             </>
                         )}
                     </div>
@@ -197,7 +270,7 @@
             );
         };
 
-        // --- Forms ---
+        // --- Components ---
         const ExpenseForm = ({ onAdd, categories, setCategories }) => {
             const [selectedId, setSelectedId] = useState('other');
             const [vals, setVals] = useState({ date: getLocalISODate(), name: '', amount: '' });
@@ -225,14 +298,12 @@
                 <div className="ios-card">
                     <div className="ios-header flex justify-between items-center">
                         <span className="ios-header-title">新增支出紀錄</span>
-                        <button onClick={() => setIsManageOpen(true)} className="text-xs text-ios-blue font-bold flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg">
-                            <i className="fa-solid fa-gear"></i> 設定
-                        </button>
+                        <button onClick={() => setIsManageOpen(true)} type="button" className="text-xs text-ios-blue font-bold flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg"><i className="fa-solid fa-gear"></i> 設定</button>
                     </div>
                     <div className="p-4 space-y-4">
                         <div className="flex flex-wrap gap-2">
                             {categories.map((cat) => (
-                                <button key={cat.id} onClick={() => handleTypeSelect(cat)} className={`tag-btn ${selectedId === cat.id ? 'tag-btn-active' : 'tag-btn-inactive'}`}>
+                                <button key={cat.id} onClick={() => handleTypeSelect(cat)} type="button" className={`tag-btn ${selectedId === cat.id ? 'tag-btn-active' : 'tag-btn-inactive'}`}>
                                     <i className={`fa-solid ${cat.icon}`}></i> {cat.label}
                                 </button>
                             ))}
@@ -242,7 +313,7 @@
                             <div className="flex-[1.5]"><div className="input-label">項目名稱</div><input type="text" value={vals.name} onChange={e => setVals({...vals, name: e.target.value})} className="input-field" placeholder="項目" /></div>
                             <div className="flex-1"><div className="input-label">金額</div><input type="number" inputMode="decimal" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field font-bold text-red-500" placeholder="$" /></div>
                         </div>
-                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-morandi-main shadow-sm active:opacity-90"><i className="fa-solid fa-plus mr-1"></i> 加入支出</button>
+                        <button onClick={handleSubmit} type="button" className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-morandi-main shadow-sm active:scale-95 transition-transform"><i className="fa-solid fa-plus mr-1"></i> 加入支出</button>
                     </div>
                     <CategoryManagerModal isOpen={isManageOpen} onClose={() => setIsManageOpen(false)} categories={categories} setCategories={setCategories} />
                 </div>
@@ -272,7 +343,7 @@
                             <div className="flex-1"><div className="input-label">做幾工 ($3000/工)</div><input type="number" inputMode="decimal" value={vals.days} onChange={e => handleDaysChange(e.target.value)} className="input-field text-center font-bold text-purple-600" placeholder="0.5 / 1" step="0.5" /></div>
                             <div className="flex-1"><div className="input-label">預計收入</div><input type="number" inputMode="decimal" value={vals.amount} readOnly className="input-field font-bold bg-gray-50 text-gray-500" /></div>
                         </div>
-                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-ios-purple shadow-sm active:opacity-90"><i className="fa-solid fa-person-digging mr-1"></i> 紀錄做工</button>
+                        <button onClick={handleSubmit} type="button" className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-ios-purple shadow-sm active:scale-95 transition-transform"><i className="fa-solid fa-person-digging mr-1"></i> 紀錄做工</button>
                     </div>
                 </div>
             );
@@ -301,7 +372,7 @@
                             <div className="flex-1"><div className="input-label">領幾工</div><input type="number" inputMode="decimal" value={vals.days} onChange={e => handleDaysChange(e.target.value)} className="input-field text-center font-bold text-green-600" placeholder="工數" /></div>
                             <div className="flex-1"><div className="input-label">實際金額</div><input type="number" inputMode="decimal" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field font-bold text-black" /></div>
                         </div>
-                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-ios-green shadow-sm active:opacity-90"><i className="fa-solid fa-money-bill-wave mr-1"></i> 紀錄已領</button>
+                        <button onClick={handleSubmit} type="button" className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-ios-green shadow-sm active:scale-95 transition-transform"><i className="fa-solid fa-money-bill-wave mr-1"></i> 紀錄已領</button>
                     </div>
                 </div>
             );
@@ -324,7 +395,7 @@
                         </div>
                         <div className="flex gap-3">
                             <div className="flex-[2]"><div className="input-label">金額</div><input type="number" inputMode="decimal" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field font-bold text-orange-600" placeholder="$" /></div>
-                            <button onClick={handleSubmit} className="flex-1 rounded-lg text-white font-bold text-sm bg-ios-orange shadow-sm active:opacity-90"><i className="fa-solid fa-plus"></i></button>
+                            <button onClick={handleSubmit} type="button" className="flex-1 rounded-lg text-white font-bold text-sm bg-ios-orange shadow-sm active:scale-95 transition-transform"><i className="fa-solid fa-plus"></i></button>
                         </div>
                     </div>
                 </div>
@@ -348,7 +419,7 @@
                         </div>
                         <div className="flex gap-2">
                             <input type="number" inputMode="decimal" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className={`input-field flex-[2] font-bold ${inputColor}`} placeholder="$ 金額" />
-                            <button onClick={handleSubmit} className={`flex-1 rounded-lg text-white font-bold text-sm ${btnColor}`}><i className="fa-solid fa-plus"></i></button>
+                            <button onClick={handleSubmit} type="button" className={`flex-1 rounded-lg text-white font-bold text-sm ${btnColor} active:scale-95 transition-transform`}><i className="fa-solid fa-plus"></i></button>
                         </div>
                     </div>
                 </div>
@@ -362,8 +433,9 @@
                  setVals(prev => ({ ...prev, days: days, amount: days ? days * 3000 : '' }));
              };
              const handleSubmit = () => {
-                 if(!vals.name || !vals.amount) return;
-                 onAdd(vals);
+                 if(!vals.amount) return;
+                 const payload = { ...vals, name: vals.name || '工資支出' };
+                 onAdd(payload);
                  setVals({ date: vals.date, name: '', days: '', amount: '' });
              };
              return (
@@ -381,7 +453,7 @@
                              </div>
                              <input type="number" inputMode="decimal" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field flex-[1.5] font-bold" placeholder="$" />
                          </div>
-                         <button onClick={handleSubmit} className="w-full py-3 rounded-lg text-white font-bold text-sm bg-morandi-main">發放薪資</button>
+                         <button onClick={handleSubmit} type="button" className="w-full py-3 rounded-lg text-white font-bold text-sm bg-morandi-main active:scale-95 transition-transform">發放薪資</button>
                      </div>
                  </div>
              );
@@ -417,9 +489,7 @@
                         <span className={`font-bold text-base ${amountClass}`}>
                             {prefix}{fmt(item.amount)}
                         </span>
-                        <button onClick={() => onDelete(item.id)} className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-full text-gray-300 hover:text-red-500 transition-colors">
-                            <i className="fa-solid fa-trash-can text-xs"></i>
-                        </button>
+                        <button onClick={() => onDelete(item.id)} type="button" className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-full text-gray-300 hover:text-red-500 transition-colors"><i className="fa-solid fa-trash-can text-xs"></i></button>
                     </div>
                 </div>
             );
@@ -455,10 +525,9 @@
             const [target, setTarget] = useLocalStorage('ji_target_v9', 100000); 
             const [transactions, setTransactions] = useLocalStorage('ji_transactions_v9', []);
             const [expenseCategories, setExpenseCategories] = useLocalStorage('ji_categories_v12', INITIAL_CATEGORIES);
-            
-            // 全域刪除確認 State
             const [deleteModalOpen, setDeleteModalOpen] = useState(false);
             const [transactionToDelete, setTransactionToDelete] = useState(null);
+            const [backupModalOpen, setBackupModalOpen] = useState(false); // 備份視窗狀態
 
             const yearMonth = useMemo(() => {
                 const y = currentDate.getFullYear();
@@ -479,24 +548,19 @@
             const expenseList = monthlyData.filter(t => t.type === 'expense');
             const workLogList = monthlyData.filter(t => t.type === 'work_log');
             const workWithdrawList = monthlyData.filter(t => t.type === 'work_withdraw');
-            
-            // Project
             const dadList = monthlyData.filter(t => t.type === 'dad');
             const payWorkerList = monthlyData.filter(t => t.type === 'pay_worker');
             const projectExpenseList = monthlyData.filter(t => t.type === 'project_expense');
 
-            // Personal Stats
             const totalIncome = incomeList.reduce((sum, t) => sum + Number(t.amount), 0);
             const totalExpense = expenseList.reduce((sum, t) => sum + Number(t.amount), 0);
             const monthlySavings = totalIncome - totalExpense;
 
-            // Work Hours Stats
             const totalWorkDays = workLogList.reduce((sum, t) => sum + Number(t.days || 0), 0);
             const totalWorkEarnings = workLogList.reduce((sum, t) => sum + Number(t.amount), 0);
             const totalWithdrawAmount = workWithdrawList.reduce((sum, t) => sum + Number(t.amount), 0);
             const unpaidAmount = totalWorkEarnings - totalWithdrawAmount;
 
-            // Project Stats
             const totalDad = dadList.reduce((sum, t) => sum + Number(t.amount), 0);
             const totalPay = payWorkerList.reduce((sum, t) => sum + Number(t.amount), 0);
             const totalProjExp = projectExpenseList.reduce((sum, t) => sum + Number(t.amount), 0);
@@ -508,13 +572,11 @@
                 setTransactions(prev => [newT, ...prev]);
             };
 
-            // Trigger Delete Modal
             const requestDelete = (id) => {
                 setTransactionToDelete(id);
                 setDeleteModalOpen(true);
             };
 
-            // Actual Delete
             const confirmDeleteTransaction = () => {
                 if(transactionToDelete) {
                     setTransactions(prev => prev.filter(t => t.id !== transactionToDelete));
@@ -546,19 +608,18 @@
 
             return (
                 <div className="max-w-md mx-auto min-h-screen">
-                    {/* Delete Modal */}
-                    <ConfirmDeleteModal 
-                        isOpen={deleteModalOpen}
-                        onClose={() => setDeleteModalOpen(false)}
-                        onConfirm={confirmDeleteTransaction}
-                    />
+                    <ConfirmDeleteModal isOpen={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} onConfirm={confirmDeleteTransaction} />
+                    <BackupModal isOpen={backupModalOpen} onClose={() => setBackupModalOpen(false)} />
 
                     <div className="sticky top-0 z-50 bg-[#F2F2F7]/95 backdrop-blur-md px-4 py-3 border-b border-gray-200">
-                        <div className="flex justify-between items-center bg-white rounded-xl p-1 shadow-sm">
-                            <button onClick={prevMonth} className="w-10 h-8 text-gray-400 hover:text-ios-blue active:scale-90 transition-transform"><i className="fa-solid fa-chevron-left"></i></button>
+                        <div className="flex justify-between items-center bg-white rounded-xl p-1 shadow-sm mb-2">
+                            <button onClick={prevMonth} type="button" className="w-10 h-8 text-gray-400 hover:text-ios-blue active:scale-90 transition-transform"><i className="fa-solid fa-chevron-left"></i></button>
                             <div className="font-rounded font-bold text-lg text-morandi-accent">{displayMonth}</div>
-                            <button onClick={nextMonth} className="w-10 h-8 text-gray-400 hover:text-ios-blue active:scale-90 transition-transform"><i className="fa-solid fa-chevron-right"></i></button>
+                            <button onClick={nextMonth} type="button" className="w-10 h-8 text-gray-400 hover:text-ios-blue active:scale-90 transition-transform"><i className="fa-solid fa-chevron-right"></i></button>
                         </div>
+                        <button onClick={() => setBackupModalOpen(true)} className="w-full bg-blue-50 text-ios-blue text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1">
+                            <i className="fa-solid fa-cloud-arrow-up"></i> 資料備份 / 同步到另一支手機
+                        </button>
                     </div>
 
                     <div className="px-4 mt-4">
@@ -584,12 +645,7 @@
                                 <SimpleInput title={`薪資收入 ($${fmt(totalIncome)})`} onAdd={(d) => addTrans('income', d)} btnColor="bg-ios-green" inputColor="text-ios-green"/>
                                 {incomeList.map(t => <ListItem key={t.id} item={t} onDelete={requestDelete} type="income" />)}
                                 
-                                <ExpenseForm 
-                                    onAdd={(d) => addTrans('expense', d)} 
-                                    categories={expenseCategories}
-                                    setCategories={setExpenseCategories}
-                                />
-                                
+                                <ExpenseForm onAdd={(d) => addTrans('expense', d)} categories={expenseCategories} setCategories={setExpenseCategories} />
                                 <div className="bg-white rounded-xl px-4 py-2 mb-4">
                                     <div className="text-xs text-gray-400 font-bold uppercase py-2 border-b border-gray-50 flex justify-between">
                                         <span>支出列表</span>
@@ -606,21 +662,10 @@
                             <div className="space-y-6 animate-fade-in">
                                 <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-5 text-white shadow-ios">
                                     <div className="flex justify-between items-center mb-4">
-                                        <div>
-                                            <p className="text-xs font-bold opacity-70 uppercase">預計總收入</p>
-                                            <div className="text-2xl font-bold">${fmt(totalWorkEarnings)}</div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-xs font-bold opacity-70 uppercase">實際已領</p>
-                                            <div className="text-2xl font-bold text-green-300">${fmt(totalWithdrawAmount)}</div>
-                                        </div>
+                                        <div><p className="text-xs font-bold opacity-70 uppercase">預計總收入</p><div className="text-2xl font-bold">${fmt(totalWorkEarnings)}</div></div>
+                                        <div className="text-right"><p className="text-xs font-bold opacity-70 uppercase">實際已領</p><div className="text-2xl font-bold text-green-300">${fmt(totalWithdrawAmount)}</div></div>
                                     </div>
-                                    <div className="pt-3 border-t border-white/20">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-xs font-bold uppercase tracking-widest opacity-80">未結餘額</span>
-                                            <span className="text-xl font-bold text-yellow-300">${fmt(unpaidAmount)}</span>
-                                        </div>
-                                    </div>
+                                    <div className="pt-3 border-t border-white/20"><div className="flex justify-between items-center"><span className="text-xs font-bold uppercase tracking-widest opacity-80">未結餘額</span><span className="text-xl font-bold text-yellow-300">${fmt(unpaidAmount)}</span></div></div>
                                 </div>
                                 <WorkHoursForm onAdd={(d) => addTrans('work_log', d)} />
                                 <WorkWithdrawForm onAdd={(d) => addTrans('work_withdraw', d)} />
@@ -638,13 +683,10 @@
                                     <p className="text-gray-400 text-xs font-bold uppercase mb-2">工地帳戶餘額</p>
                                     <div className={`text-4xl font-rounded font-bold mb-2 ${projectBalance < 0 ? 'text-red-500' : 'text-gray-800'}`}>${fmt(projectBalance)}</div>
                                 </div>
-                                
                                 <SimpleInput title={`資金入帳 ($${fmt(totalDad)})`} onAdd={(d) => addTrans('dad', d)} btnColor="bg-ios-blue" inputColor="text-ios-blue"/>
                                 {dadList.map(t => <ListItem key={t.id} item={t} onDelete={requestDelete} type="dad" />)}
-                                
                                 <ProjectPaymentForm title={`發薪水 ($${fmt(totalPay)})`} onAdd={(d) => addTrans('pay_worker', d)} />
                                 {payWorkerList.map(t => <ListItem key={t.id} item={t} onDelete={requestDelete} type="pay_worker" />)}
-                                
                                 <ProjectExpenseForm onAdd={(d) => addTrans('project_expense', d)} />
                                 <div className="bg-white rounded-xl px-4 py-2 mb-8">
                                     <div className="text-xs text-gray-400 font-bold uppercase py-2 border-b border-gray-50 flex justify-between">
@@ -666,3 +708,4 @@
     </script>
 </body>
 </html>
+
