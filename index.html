@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>小吉發大財 V7 Auto</title>
+    <title>小吉發大財 V10</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -19,8 +19,8 @@
             theme: {
                 extend: {
                     colors: {
-                        ios: { bg: '#F2F2F7', card: '#FFFFFF', blue: '#007AFF', green: '#34C759', red: '#FF3B30', gray: '#8E8E93', border: '#E5E5EA' },
-                        morandi: { main: '#778DA9', pink: '#F4ACB7', light: '#E0E1DD' }
+                        ios: { bg: '#F2F2F7', card: '#FFFFFF', blue: '#007AFF', green: '#34C759', red: '#FF3B30', purple: '#5856D6', orange: '#FF9500' },
+                        morandi: { main: '#778DA9', pink: '#F4ACB7', light: '#E0E1DD', accent: '#415A77', gold: '#D4AF37' }
                     },
                     fontFamily: {
                         sans: ['-apple-system', 'BlinkMacSystemFont', '"Noto Sans TC"', 'sans-serif'],
@@ -41,27 +41,32 @@
         .input-field { background: #F2F2F7; border-radius: 8px; padding: 12px; font-size: 16px; outline: none; width: 100%; border: 1px solid transparent; transition: all 0.2s; appearance: none; }
         .input-field:focus { background: white; border-color: #E5E5EA; box-shadow: 0 0 0 2px rgba(0,122,255,0.1); }
         
-        .segment-control { background-color: #E5E5EA; padding: 2px; border-radius: 9px; display: flex; margin-bottom: 20px; }
+        .tag-btn { padding: 8px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; transition: all 0.2s; border: 1px solid transparent; display: flex; align-items: center; gap: 4px; }
+        .tag-btn-active { background-color: #778DA9; color: white; border-color: #778DA9; }
+        .tag-btn-inactive { background-color: #F2F2F7; color: #64748B; border-color: #E5E5EA; }
+
+        .segment-control { background-color: #E5E5EA; padding: 2px; border-radius: 9px; display: flex; margin-bottom: 16px; }
         .segment-btn { flex: 1; padding: 6px; text-align: center; border-radius: 7px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
         .active-tab { background-color: white; color: black; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .inactive-tab { color: #636366; }
+        
+        /* Progress Bar Animation */
+        @keyframes fillBar { from { width: 0%; } }
+        .progress-fill { animation: fillBar 1s ease-out forwards; }
     </style>
 </head>
 <body class="pb-24">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef, useCallback } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
-        // --- 工具函數 ---
         const getLocalISODate = () => {
             const now = new Date();
             const offset = now.getTimezoneOffset() * 60000;
             return new Date(now - offset).toISOString().slice(0, 10);
         };
-
         const fmt = (num) => new Intl.NumberFormat('zh-TW').format(num);
-
         const useLocalStorage = (key, initialValue) => {
             const [storedValue, setStoredValue] = useState(() => {
                 try {
@@ -77,152 +82,180 @@
             return [storedValue, setValue];
         };
 
-        // --- 一般輸入組件 (收入、每日支出、資金入帳) ---
-        const InputStack = ({ title, inputs, onAdd, btnColor = 'bg-morandi-main', btnText = '新增紀錄' }) => {
-            const [vals, setVals] = useState({ date: getLocalISODate() });
+        const DEFAULTS = {
+            rent: { label: '房租', amount: 9974, icon: 'fa-house' },
+            mgmt: { label: '管理費', amount: 1410, icon: 'fa-building' },
+            car: { label: '車貸', amount: 20000, icon: 'fa-car' },
+            scooter: { label: '機車貸', amount: 7000, icon: 'fa-motorcycle' },
+            baby: { label: '77寶貝', amount: 30000, icon: 'fa-heart' },
+            credit: { label: '信用卡', amount: 0, icon: 'fa-credit-card' },
+            other: { label: '其他', amount: '', icon: 'fa-basket-shopping' }
+        };
 
-            const handleChange = (key, value) => {
-                setVals(prev => ({ ...prev, [key]: value }));
+        const ExpenseForm = ({ onAdd }) => {
+            const [type, setType] = useState('other');
+            const [vals, setVals] = useState({ date: getLocalISODate(), name: '', amount: '' });
+            const handleTypeSelect = (key) => {
+                setType(key);
+                setVals(prev => ({
+                    ...prev,
+                    name: key === 'other' ? '' : DEFAULTS[key].label,
+                    amount: DEFAULTS[key].amount
+                }));
             };
+            const handleSubmit = () => {
+                if (!vals.name || !vals.amount) return;
+                onAdd({ ...vals, category: type });
+                setVals({ date: vals.date, name: '', amount: '' });
+                setType('other');
+            };
+            return (
+                <div className="ios-card">
+                    <div className="ios-header"><span className="ios-header-title">新增支出紀錄</span></div>
+                    <div className="p-4 space-y-4">
+                        <div className="flex flex-wrap gap-2">
+                            {Object.entries(DEFAULTS).map(([key, cfg]) => (
+                                <button key={key} onClick={() => handleTypeSelect(key)} className={`tag-btn ${type === key ? 'tag-btn-active' : 'tag-btn-inactive'}`}>
+                                    <i className={`fa-solid ${cfg.icon}`}></i> {cfg.label}
+                                </button>
+                            ))}
+                        </div>
+                        <div>
+                            <div className="input-label">日期</div>
+                            <input type="date" value={vals.date} onChange={e => setVals({...vals, date: e.target.value})} className="input-field" />
+                        </div>
+                        <div className="flex gap-3">
+                            <div className="flex-[1.5]">
+                                <div className="input-label">項目名稱</div>
+                                <input type="text" value={vals.name} onChange={e => setVals({...vals, name: e.target.value})} className="input-field" placeholder="項目" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="input-label">金額</div>
+                                <input type="number" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field font-bold text-red-500" placeholder="$" />
+                            </div>
+                        </div>
+                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-morandi-main shadow-sm active:opacity-90">
+                            <i className="fa-solid fa-plus mr-1"></i> 加入支出
+                        </button>
+                    </div>
+                </div>
+            );
+        };
 
+        const WorkHoursForm = ({ onAdd }) => {
+            const [vals, setVals] = useState({ date: getLocalISODate(), note: '', days: '', amount: '' });
+            const handleDaysChange = (val) => {
+                const days = val;
+                setVals(prev => ({ ...prev, days: days, amount: days ? days * 3000 : '' }));
+            };
+            const handleSubmit = () => {
+                if (!vals.days) return;
+                onAdd(vals);
+                setVals({ date: vals.date, note: '', days: '', amount: '' });
+            };
+            return (
+                <div className="ios-card">
+                    <div className="ios-header"><span className="ios-header-title">新增工時 (我做的)</span></div>
+                    <div className="p-4 space-y-4">
+                        <div className="flex gap-3">
+                            <div className="flex-1">
+                                <div className="input-label">日期</div>
+                                <input type="date" value={vals.date} onChange={e => setVals({...vals, date: e.target.value})} className="input-field" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="input-label">工地/備註</div>
+                                <input type="text" value={vals.note} onChange={e => setVals({...vals, note: e.target.value})} className="input-field" placeholder="備註" />
+                            </div>
+                        </div>
+                        <div className="flex gap-3">
+                            <div className="flex-1">
+                                <div className="input-label">做幾工 ($3000/工)</div>
+                                <input type="number" value={vals.days} onChange={e => handleDaysChange(e.target.value)} className="input-field text-center font-bold text-purple-600" placeholder="0.5 / 1" step="0.5" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="input-label">預計收入</div>
+                                <input type="number" value={vals.amount} readOnly className="input-field font-bold bg-gray-50 text-gray-500" />
+                            </div>
+                        </div>
+                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-ios-purple shadow-sm active:opacity-90">
+                            <i className="fa-solid fa-person-digging mr-1"></i> 紀錄做工
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const WorkWithdrawForm = ({ onAdd }) => {
+            const [vals, setVals] = useState({ date: getLocalISODate(), note: '', days: '', amount: '' });
+            const handleDaysChange = (val) => {
+                const days = val;
+                setVals(prev => ({ ...prev, days: days, amount: days ? days * 3000 : '' }));
+            };
             const handleSubmit = () => {
                 if (!vals.amount) return;
                 onAdd(vals);
-                const currentDay = vals.date; 
-                setVals({ date: currentDay, note: '', name: '', amount: '', days: '' });
+                setVals({ date: vals.date, note: '', days: '', amount: '' });
             };
-
             return (
-                <div className="ios-card">
-                    <div className="ios-header flex justify-between">
-                        <span className="ios-header-title">{title}</span>
-                    </div>
+                <div className="ios-card border-l-4 border-ios-green">
+                    <div className="ios-header"><span className="ios-header-title text-ios-green">紀錄已領 (我領的)</span></div>
                     <div className="p-4 space-y-4">
-                        {inputs.some(i => i.key === 'date') && (
-                            <div>
-                                <div className="input-label">日期</div>
-                                <input type="date" value={vals.date} onChange={(e) => handleChange('date', e.target.value)} className="input-field" />
-                            </div>
-                        )}
-                        {inputs.filter(i => i.key !== 'date').map((inp, idx) => (
-                            <div key={idx} className={inp.className || ''}>
-                                {inp.label && <div className="input-label">{inp.label}</div>}
-                                <input 
-                                    type={inp.type || 'text'} 
-                                    placeholder={inp.placeholder}
-                                    value={vals[inp.key] || ''}
-                                    onChange={(e) => handleChange(inp.key, e.target.value)}
-                                    className={`input-field ${inp.inputClass || ''}`}
-                                />
-                            </div>
-                        ))}
-                        <button onClick={handleSubmit} className={`w-full py-3.5 rounded-lg text-white font-bold text-sm shadow-sm active:opacity-90 transition-opacity ${btnColor}`}>
-                            <i className="fa-solid fa-plus mr-1"></i> {btnText}
-                        </button>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- [專用] 工資輸入組件 (含自動計算 $3000/工) ---
-        const WorkWageForm = ({ title, onAdd }) => {
-            const [vals, setVals] = useState({ 
-                date: getLocalISODate(),
-                name: '',
-                days: '',
-                amount: ''
-            });
-
-            const WAGE_PER_DAY = 3000;
-
-            const handleDaysChange = (val) => {
-                // 當輸入工數時，自動計算金額
-                const days = val;
-                const newAmount = days ? days * WAGE_PER_DAY : '';
-                setVals(prev => ({ ...prev, days: days, amount: newAmount }));
-            };
-
-            const handleSubmit = () => {
-                if (!vals.name || !vals.amount) return;
-                onAdd(vals);
-                // 重置 (保留日期)
-                setVals(prev => ({ ...prev, name: '', days: '', amount: '' }));
-            };
-
-            return (
-                <div className="ios-card">
-                    <div className="ios-header flex justify-between">
-                        <span className="ios-header-title">{title}</span>
-                    </div>
-                    <div className="p-4 space-y-4">
-                        <div>
-                            <div className="input-label">發放日期</div>
-                            <input 
-                                type="date" 
-                                value={vals.date}
-                                onChange={e => setVals({...vals, date: e.target.value})}
-                                className="input-field"
-                            />
-                        </div>
-                        <div>
-                            <div className="input-label">領款人姓名</div>
-                            <input 
-                                type="text" 
-                                placeholder="姓名" 
-                                value={vals.name}
-                                onChange={e => setVals({...vals, name: e.target.value})}
-                                className="input-field"
-                            />
-                        </div>
-                        {/* 工數與金額並排，但手機上會自動換行如果空間不夠，這裡用 Stack */}
                         <div className="flex gap-3">
                             <div className="flex-1">
-                                <div className="input-label">工數 (1工=${WAGE_PER_DAY})</div>
-                                <input 
-                                    type="number" 
-                                    placeholder="幾工" 
-                                    value={vals.days}
-                                    onChange={e => handleDaysChange(e.target.value)}
-                                    className="input-field text-center font-bold text-gray-800"
-                                />
+                                <div className="input-label">日期</div>
+                                <input type="date" value={vals.date} onChange={e => setVals({...vals, date: e.target.value})} className="input-field" />
                             </div>
-                            <div className="flex-[1.5]">
-                                <div className="input-label">總金額 (自動計算)</div>
-                                <input 
-                                    type="number" 
-                                    placeholder="$" 
-                                    value={vals.amount}
-                                    onChange={e => setVals({...vals, amount: e.target.value})}
-                                    className="input-field font-bold text-black"
-                                />
+                            <div className="flex-1">
+                                <div className="input-label">備註</div>
+                                <input type="text" value={vals.note} onChange={e => setVals({...vals, note: e.target.value})} className="input-field" placeholder="如: 7/5領錢" />
                             </div>
                         </div>
-                        
-                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm shadow-sm active:opacity-90 transition-opacity bg-morandi-main">
-                            <i className="fa-solid fa-plus mr-1"></i> 新增支出紀錄
+                        <div className="flex gap-3">
+                            <div className="flex-1">
+                                <div className="input-label">領幾工</div>
+                                <input type="number" value={vals.days} onChange={e => handleDaysChange(e.target.value)} className="input-field text-center font-bold text-green-600" placeholder="工數" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="input-label">實際金額</div>
+                                <input type="number" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field font-bold text-black" />
+                            </div>
+                        </div>
+                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-ios-green shadow-sm active:opacity-90">
+                            <i className="fa-solid fa-money-bill-wave mr-1"></i> 紀錄已領
                         </button>
                     </div>
                 </div>
             );
         };
 
-        const ListItem = ({ item, onDelete, isNegative, subtitle }) => {
+        const ListItem = ({ item, onDelete, type }) => {
             const day = item.date.split('-')[2];
+            let colorClass = 'bg-morandi-main';
+            let amountClass = 'text-gray-800';
+            let prefix = '';
+            let label = item.name || item.note;
+
+            if (type === 'income') { colorClass = 'bg-ios-green'; amountClass = 'text-ios-green'; prefix = '+'; }
+            else if (type === 'expense') { colorClass = 'bg-morandi-pink'; amountClass = 'text-gray-800'; prefix = '-'; }
+            else if (type === 'work_log') { colorClass = 'bg-ios-purple'; amountClass = 'text-ios-purple'; prefix = '+'; label = `做工: ${label || ''}` }
+            else if (type === 'work_withdraw') { colorClass = 'bg-ios-green'; amountClass = 'text-green-600'; prefix = '領'; label = `已領: ${label || ''}` }
+            else if (type === 'dad') { colorClass = 'bg-ios-blue'; amountClass = 'text-ios-blue'; prefix = '+'; }
+            else if (type === 'pay_worker') { colorClass = 'bg-gray-500'; amountClass = 'text-gray-800'; prefix = '-'; }
+
             return (
                 <div className="flex justify-between items-center py-3 border-b border-gray-100 last:border-0 animate-fade-in">
                     <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm flex-shrink-0 ${isNegative ? 'bg-morandi-pink' : 'bg-morandi-main'}`}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm flex-shrink-0 ${colorClass}`}>
                             {day}
-                            <span className="text-[9px] absolute mt-5 opacity-80">日</span>
                         </div>
                         <div>
-                            <div className="font-bold text-gray-800 text-base leading-tight">{item.name || item.note}</div>
-                            {subtitle && <div className="text-xs text-gray-500 mt-0.5">{subtitle}</div>}
+                            <div className="font-bold text-gray-800 text-base leading-tight">{label}</div>
+                            {item.days && <div className="text-xs text-gray-400 mt-0.5 font-bold">{item.days} 工</div>}
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
-                        <span className={`font-bold text-base ${isNegative ? 'text-gray-800' : 'text-green-600'}`}>
-                            {isNegative ? '-' : '+'}{fmt(item.amount)}
+                        <span className={`font-bold text-base ${amountClass}`}>
+                            {prefix}{fmt(item.amount)}
                         </span>
                         <button onClick={() => onDelete(item.id)} className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-full text-gray-300 hover:text-red-500 transition-colors">
                             <i className="fa-solid fa-trash-can text-xs"></i>
@@ -232,19 +265,107 @@
             );
         };
 
+        const SimpleInput = ({ title, onAdd, btnColor, inputColor = "text-black" }) => {
+            const [vals, setVals] = useState({ date: getLocalISODate(), note: '', amount: '' });
+            const handleSubmit = () => {
+                if (!vals.amount) return;
+                onAdd(vals);
+                setVals({ date: vals.date, note: '', amount: '' });
+            };
+            return (
+                <div className="ios-card">
+                    <div className="ios-header"><span className="ios-header-title">{title}</span></div>
+                    <div className="p-4 flex flex-col gap-3">
+                        <div className="flex gap-2">
+                            <input type="date" value={vals.date} onChange={e => setVals({...vals, date: e.target.value})} className="input-field flex-1" />
+                            <input type="text" value={vals.note} onChange={e => setVals({...vals, note: e.target.value})} className="input-field flex-[1.5]" placeholder="備註" />
+                        </div>
+                        <div className="flex gap-2">
+                            <input type="number" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className={`input-field flex-[2] font-bold ${inputColor}`} placeholder="$ 金額" />
+                            <button onClick={handleSubmit} className={`flex-1 rounded-lg text-white font-bold text-sm ${btnColor}`}>
+                                <i className="fa-solid fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        const ProjectPaymentForm = ({ title, onAdd }) => {
+             const [vals, setVals] = useState({ date: getLocalISODate(), name: '', days: '', amount: '' });
+             const handleDaysChange = (val) => {
+                 const days = val;
+                 setVals(prev => ({ ...prev, days: days, amount: days ? days * 3000 : '' }));
+             };
+             const handleSubmit = () => {
+                 if(!vals.name || !vals.amount) return;
+                 onAdd(vals);
+                 setVals({ date: vals.date, name: '', days: '', amount: '' });
+             };
+             return (
+                 <div className="ios-card">
+                     <div className="ios-header"><span className="ios-header-title">{title}</span></div>
+                     <div className="p-4 space-y-3">
+                         <div className="flex gap-2">
+                             <input type="date" value={vals.date} onChange={e => setVals({...vals, date: e.target.value})} className="input-field flex-1" />
+                             <input type="text" value={vals.name} onChange={e => setVals({...vals, name: e.target.value})} className="input-field flex-1" placeholder="領款人" />
+                         </div>
+                         <div className="flex gap-2">
+                             <div className="flex-1 relative">
+                                 <input type="number" value={vals.days} onChange={e => handleDaysChange(e.target.value)} className="input-field text-center font-bold" placeholder="工數" />
+                                 <span className="absolute right-3 top-3 text-xs text-gray-400 pointer-events-none">工</span>
+                             </div>
+                             <input type="number" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field flex-[1.5] font-bold" placeholder="$" />
+                         </div>
+                         <button onClick={handleSubmit} className="w-full py-3 rounded-lg text-white font-bold text-sm bg-morandi-main">發放薪資</button>
+                     </div>
+                 </div>
+             );
+        };
+
+        const ProgressBar = ({ current, target }) => {
+            const pct = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+            const isDone = current >= target && target > 0;
+            return (
+                <div className="bg-white rounded-xl p-4 shadow-sm mt-4">
+                    <div className="flex justify-between items-end mb-2">
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">
+                            {isDone ? '目標達成 🎉' : '本月目標進度'}
+                        </span>
+                        <span className={`text-xs font-bold ${isDone ? 'text-morandi-gold' : 'text-morandi-main'}`}>
+                            {Math.round(pct)}%
+                        </span>
+                    </div>
+                    <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden">
+                        <div 
+                            className={`h-full transition-all duration-1000 ease-out progress-fill ${isDone ? 'bg-morandi-gold' : 'bg-morandi-main'}`} 
+                            style={{ width: `${pct}%` }}
+                        ></div>
+                    </div>
+                    <div className="flex justify-between mt-1 text-[10px] text-gray-400">
+                        <span>$0</span>
+                        <span>${fmt(target)}</span>
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
-            const [activeTab, setActiveTab] = useState('personal');
+            const [activeTab, setActiveTab] = useState('personal'); 
             const [currentDate, setCurrentDate] = useState(new Date());
-            const [target, setTarget] = useLocalStorage('ji_target_v6', 100000); 
-            const [transactions, setTransactions] = useLocalStorage('ji_transactions_v6', []);
-            const [fixedSettings, setFixedSettings] = useLocalStorage('ji_fixed_v6', { baby: 30000, credit: 0, car: 20000, rent: 9974, bike: 7000 });
+            
+            // Try to read old data keys first, if not found, use new keys.
+            // But to simplify for this user, we will stick to v9 keys for data continuity if they used previous step.
+            // If they are new, it defaults to empty.
+            // Note: I will use 'ji_transactions_v9' as key to maintain data from previous step.
+            const [target, setTarget] = useLocalStorage('ji_target_v9', 100000); 
+            const [transactions, setTransactions] = useLocalStorage('ji_transactions_v9', []);
 
             const yearMonth = useMemo(() => {
                 const y = currentDate.getFullYear();
                 const m = String(currentDate.getMonth() + 1).padStart(2, '0');
                 return `${y}-${m}`;
             }, [currentDate]);
-
             const displayMonth = `${currentDate.getFullYear()}年 ${currentDate.getMonth() + 1}月`;
             const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
             const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
@@ -256,38 +377,34 @@
             }, [transactions, yearMonth]);
 
             const incomeList = monthlyData.filter(t => t.type === 'income');
-            const dailyList = monthlyData.filter(t => t.type === 'daily');
+            const expenseList = monthlyData.filter(t => t.type === 'expense');
+            const workLogList = monthlyData.filter(t => t.type === 'work_log');
+            const workWithdrawList = monthlyData.filter(t => t.type === 'work_withdraw');
             const dadList = monthlyData.filter(t => t.type === 'dad');
-            const workList = monthlyData.filter(t => t.type === 'work');
+            const payWorkerList = monthlyData.filter(t => t.type === 'pay_worker');
 
             const totalIncome = incomeList.reduce((sum, t) => sum + Number(t.amount), 0);
-            const totalDaily = dailyList.reduce((sum, t) => sum + Number(t.amount), 0);
-            const totalFixed = fixedSettings.car + fixedSettings.rent + fixedSettings.bike + fixedSettings.baby + fixedSettings.credit;
-            const totalExpense = totalFixed + totalDaily;
+            const totalExpense = expenseList.reduce((sum, t) => sum + Number(t.amount), 0);
             const monthlySavings = totalIncome - totalExpense;
 
-            const totalDadDeposit = dadList.reduce((sum, t) => sum + Number(t.amount), 0);
-            const totalWorkExp = workList.reduce((sum, t) => sum + Number(t.amount), 0);
-            const workBalance = totalDadDeposit - totalWorkExp;
+            const totalWorkDays = workLogList.reduce((sum, t) => sum + Number(t.days || 0), 0);
+            const totalWorkEarnings = workLogList.reduce((sum, t) => sum + Number(t.amount), 0);
+            const totalWithdrawAmount = workWithdrawList.reduce((sum, t) => sum + Number(t.amount), 0);
+            const unpaidAmount = totalWorkEarnings - totalWithdrawAmount;
 
-            const addTransaction = (type, data) => {
-                const finalDate = data.date || getLocalISODate();
-                const newTrans = { 
-                    id: Date.now(), 
-                    type, 
-                    ...data, 
-                    date: finalDate,
-                    amount: Number(data.amount) 
-                };
-                if (!finalDate.startsWith(yearMonth)) alert(`紀錄已新增至 ${finalDate}，請切換月份查看`);
-                setTransactions(prev => [newTrans, ...prev]);
+            const totalDad = dadList.reduce((sum, t) => sum + Number(t.amount), 0);
+            const totalPay = payWorkerList.reduce((sum, t) => sum + Number(t.amount), 0);
+            const projectBalance = totalDad - totalPay;
+
+            const addTrans = (type, data) => {
+                const newT = { id: Date.now(), type, ...data, amount: Number(data.amount) };
+                if (!newT.date.startsWith(yearMonth)) alert(`紀錄已新增至 ${newT.date}，請切換月份查看`);
+                setTransactions(prev => [newT, ...prev]);
+            };
+            const removeTrans = (id) => {
+                if (confirm('確定刪除？')) setTransactions(prev => prev.filter(t => t.id !== id));
             };
 
-            const removeTransaction = (id) => {
-                if (confirm('確定刪除此紀錄？')) setTransactions(prev => prev.filter(t => t.id !== id));
-            };
-
-            // Chart
             const canvasRef = useRef(null);
             const chartRef = useRef(null);
             useEffect(() => {
@@ -301,15 +418,10 @@
                             datasets: [{
                                 data: [totalIncome, totalExpense, monthlySavings],
                                 backgroundColor: ['#A7D7C5', '#F4ACB7', '#778DA9'],
-                                borderRadius: 6,
-                                barThickness: 40
+                                borderRadius: 6, barThickness: 40
                             }]
                         },
-                        options: {
-                            responsive: true, maintainAspectRatio: false,
-                            plugins: { legend: { display: false } },
-                            scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } }
-                        }
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } } }
                     });
                 }
             }, [activeTab, totalIncome, totalExpense, monthlySavings]);
@@ -319,7 +431,7 @@
                     <div className="sticky top-0 z-50 bg-[#F2F2F7]/95 backdrop-blur-md px-4 py-3 border-b border-gray-200">
                         <div className="flex justify-between items-center bg-white rounded-xl p-1 shadow-sm">
                             <button onClick={prevMonth} className="w-10 h-8 text-gray-400 hover:text-ios-blue active:scale-90 transition-transform"><i className="fa-solid fa-chevron-left"></i></button>
-                            <div className="font-rounded font-bold text-lg text-morandi-main">{displayMonth}</div>
+                            <div className="font-rounded font-bold text-lg text-morandi-accent">{displayMonth}</div>
                             <button onClick={nextMonth} className="w-10 h-8 text-gray-400 hover:text-ios-blue active:scale-90 transition-transform"><i className="fa-solid fa-chevron-right"></i></button>
                         </div>
                     </div>
@@ -327,7 +439,8 @@
                     <div className="px-4 mt-4">
                         <div className="segment-control">
                             <div onClick={() => setActiveTab('personal')} className={`segment-btn ${activeTab === 'personal' ? 'active-tab' : 'inactive-tab'}`}>養成日記</div>
-                            <div onClick={() => setActiveTab('work')} className={`segment-btn ${activeTab === 'work' ? 'active-tab' : 'inactive-tab'}`}>工作記帳</div>
+                            <div onClick={() => setActiveTab('hours')} className={`segment-btn ${activeTab === 'hours' ? 'active-tab' : 'inactive-tab'}`}>工時紀錄</div>
+                            <div onClick={() => setActiveTab('work')} className={`segment-btn ${activeTab === 'work' ? 'active-tab' : 'inactive-tab'}`}>工地記帳</div>
                         </div>
 
                         {activeTab === 'personal' && (
@@ -341,65 +454,55 @@
                                         </div>
                                     </div>
                                     <div className={`text-4xl font-rounded font-bold mb-4 tracking-tight relative z-10 ${monthlySavings < 0 ? 'text-red-200' : ''}`}>${fmt(monthlySavings)}</div>
-                                    <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white opacity-10 rounded-full"></div>
                                 </div>
+                                
+                                {/* 新增：目標進度條 */}
+                                <ProgressBar current={monthlySavings} target={target} />
 
-                                <div>
-                                    <InputStack 
-                                        title={`薪資收入 (本月: $${fmt(totalIncome)})`}
-                                        inputs={[
-                                            { key: 'date', label: '入帳日期' },
-                                            { key: 'note', placeholder: '備註 (如: 6月薪水)', label: '項目名稱' },
-                                            { key: 'amount', placeholder: '$ 金額', type: 'number', label: '金額', inputClass: 'font-bold text-green-700' }
-                                        ]}
-                                        onAdd={(v) => addTransaction('income', v)}
-                                        btnColor="bg-ios-green"
-                                    />
-                                    {incomeList.length > 0 && (
-                                        <div className="bg-white rounded-xl px-4 py-2 mb-4">
-                                            {incomeList.map(t => <ListItem key={t.id} item={t} onDelete={removeTransaction} />)}
-                                        </div>
-                                    )}
+                                <SimpleInput title={`薪資收入 ($${fmt(totalIncome)})`} onAdd={(d) => addTrans('income', d)} btnColor="bg-ios-green" inputColor="text-ios-green"/>
+                                {incomeList.map(t => <ListItem key={t.id} item={t} onDelete={removeTrans} type="income" />)}
+
+                                <ExpenseForm onAdd={(d) => addTrans('expense', d)} />
+                                <div className="bg-white rounded-xl px-4 py-2 mb-4">
+                                    <div className="text-xs text-gray-400 font-bold uppercase py-2 border-b border-gray-50 flex justify-between">
+                                        <span>支出列表</span>
+                                        <span>總計: ${fmt(totalExpense)}</span>
+                                    </div>
+                                    {expenseList.length === 0 && <div className="text-center text-xs text-gray-300 py-4">無支出</div>}
+                                    {expenseList.map(t => <ListItem key={t.id} item={t} onDelete={removeTrans} type="expense" />)}
                                 </div>
+                                <div className="bg-white rounded-xl p-4 shadow-sm mb-8 h-64"><canvas ref={canvasRef}></canvas></div>
+                            </div>
+                        )}
 
-                                <div className="ios-card">
-                                    <div className="ios-header"><span className="ios-header-title">本月固定支出 (${fmt(totalFixed)})</span></div>
-                                    <div>
-                                        <div className="flex justify-between items-center p-3 border-b border-gray-100">
-                                            <div className="flex items-center gap-2 text-morandi-pink font-bold text-sm"><i className="fa-solid fa-heart"></i> 還77寶貝</div>
-                                            <input type="number" value={fixedSettings.baby} onChange={e => setFixedSettings({...fixedSettings, baby: Number(e.target.value)})} className="text-right w-24 outline-none font-bold text-gray-700 bg-transparent" />
+                        {activeTab === 'hours' && (
+                            <div className="space-y-6 animate-fade-in">
+                                <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-5 text-white shadow-ios">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <div>
+                                            <p className="text-xs font-bold opacity-70 uppercase">預計總收入</p>
+                                            <div className="text-2xl font-bold">${fmt(totalWorkEarnings)}</div>
                                         </div>
-                                        <div className="flex justify-between items-center p-3 border-b border-gray-100">
-                                            <div className="flex items-center gap-2 text-gray-600 font-bold text-sm"><i className="fa-solid fa-credit-card"></i> 信用卡</div>
-                                            <input type="number" value={fixedSettings.credit} onChange={e => setFixedSettings({...fixedSettings, credit: Number(e.target.value)})} className="text-right w-24 outline-none font-bold text-gray-700 bg-transparent" />
+                                        <div className="text-right">
+                                            <p className="text-xs font-bold opacity-70 uppercase">實際已領</p>
+                                            <div className="text-2xl font-bold text-green-300">${fmt(totalWithdrawAmount)}</div>
                                         </div>
-                                        <div className="flex bg-gray-50 p-3 text-xs text-gray-400 justify-between text-center">
-                                            <span className="flex-1">車貸 ${fmt(fixedSettings.car)}</span>
-                                            <span className="flex-1 border-l border-gray-200">房租 ${fmt(fixedSettings.rent)}</span>
-                                            <span className="flex-1 border-l border-gray-200">機車 ${fmt(fixedSettings.bike)}</span>
+                                    </div>
+                                    <div className="pt-3 border-t border-white/20">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-bold uppercase tracking-widest opacity-80">未結餘額</span>
+                                            <span className="text-xl font-bold text-yellow-300">${fmt(unpaidAmount)}</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div>
-                                    <InputStack 
-                                        title={`每日支出明細 (本月: $${fmt(totalDaily)})`}
-                                        inputs={[
-                                            { key: 'date', label: '日期' },
-                                            { key: 'name', placeholder: '消費項目', label: '項目' },
-                                            { key: 'amount', placeholder: '$ 金額', type: 'number', label: '金額' }
-                                        ]}
-                                        onAdd={(v) => addTransaction('daily', v)}
-                                    />
-                                    {dailyList.length > 0 ? (
-                                        <div className="bg-white rounded-xl px-4 py-2 mb-4">
-                                            {dailyList.map(t => <ListItem key={t.id} item={t} onDelete={removeTransaction} isNegative />)}
-                                        </div>
-                                    ) : <div className="text-center text-xs text-gray-400 mb-4">本月無支出</div>}
-                                </div>
+                                <WorkHoursForm onAdd={(d) => addTrans('work_log', d)} />
+                                <WorkWithdrawForm onAdd={(d) => addTrans('work_withdraw', d)} />
 
-                                <div className="bg-white rounded-xl p-4 shadow-sm mb-8 h-64">
-                                    <canvas ref={canvasRef}></canvas>
+                                <div className="bg-white rounded-xl px-4 py-2 mb-8">
+                                    <div className="text-xs text-gray-400 font-bold uppercase py-2 border-b border-gray-50">本月工時紀錄表</div>
+                                    {[...workLogList, ...workWithdrawList].sort((a,b) => new Date(b.date) - new Date(a.date)).map(t => <ListItem key={t.id} item={t} onDelete={removeTrans} type={t.type} />)}
+                                    {workLogList.length === 0 && workWithdrawList.length === 0 && <div className="text-center text-xs text-gray-300 py-4">無紀錄</div>}
                                 </div>
                             </div>
                         )}
@@ -407,41 +510,16 @@
                         {activeTab === 'work' && (
                             <div className="space-y-6 animate-fade-in">
                                 <div className="bg-white rounded-2xl p-6 shadow-ios text-center border border-gray-100">
-                                    <p className="text-gray-400 text-xs font-bold uppercase mb-2">本月工作帳戶餘額</p>
-                                    <div className={`text-4xl font-rounded font-bold mb-2 ${workBalance < 0 ? 'text-red-500' : 'text-gray-800'}`}>${fmt(workBalance)}</div>
+                                    <p className="text-gray-400 text-xs font-bold uppercase mb-2">工地帳戶餘額</p>
+                                    <div className={`text-4xl font-rounded font-bold mb-2 ${projectBalance < 0 ? 'text-red-500' : 'text-gray-800'}`}>${fmt(projectBalance)}</div>
                                 </div>
-
-                                <div>
-                                    <InputStack 
-                                        title={`資金入帳 (本月: ${fmt(totalDadDeposit)})`}
-                                        inputs={[
-                                            { key: 'date', label: '入帳日期' },
-                                            { key: 'note', placeholder: '備註 (如: 爸爸寄存)', label: '來源備註' },
-                                            { key: 'amount', placeholder: '$ 金額', type: 'number', label: '金額', inputClass: 'text-ios-blue font-bold' }
-                                        ]}
-                                        onAdd={(v) => addTransaction('dad', v)}
-                                        btnColor="bg-ios-blue"
-                                    />
-                                    {dadList.length > 0 && (
-                                        <div className="bg-white rounded-xl px-4 py-2 mb-4">
-                                            {dadList.map(t => <ListItem key={t.id} item={t} onDelete={removeTransaction} />)}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div>
-                                    {/* 專用工資輸入組件 */}
-                                    <WorkWageForm 
-                                        title={`工資支出 (本月: ${fmt(totalWorkExp)})`}
-                                        onAdd={(v) => addTransaction('work', v)}
-                                    />
-                                    {workList.length > 0 ? (
-                                        <div className="bg-white rounded-xl px-4 py-2 mb-10">
-                                            {workList.map(t => (
-                                                <ListItem key={t.id} item={t} onDelete={removeTransaction} isNegative subtitle={<span className="bg-gray-100 text-gray-500 text-[10px] px-2 py-0.5 rounded">{t.days} 工</span>} />
-                                            ))}
-                                        </div>
-                                    ) : <div className="text-center text-xs text-gray-400 mb-10">本月無工資紀錄</div>}
+                                <SimpleInput title={`資金入帳 ($${fmt(totalDad)})`} onAdd={(d) => addTrans('dad', d)} btnColor="bg-ios-blue" inputColor="text-ios-blue"/>
+                                {dadList.map(t => <ListItem key={t.id} item={t} onDelete={removeTrans} type="dad" />)}
+                                <ProjectPaymentForm title={`發薪水 ($${fmt(totalPay)})`} onAdd={(d) => addTrans('pay_worker', d)} />
+                                <div className="bg-white rounded-xl px-4 py-2 mb-8">
+                                    <div className="text-xs text-gray-400 font-bold uppercase py-2 border-b border-gray-50">發放紀錄</div>
+                                    {payWorkerList.length === 0 && <div className="text-center text-xs text-gray-300 py-4">無紀錄</div>}
+                                    {payWorkerList.map(t => <ListItem key={t.id} item={t} onDelete={removeTrans} type="pay_worker" />)}
                                 </div>
                             </div>
                         )}
@@ -455,3 +533,4 @@
     </script>
 </body>
 </html>
+
