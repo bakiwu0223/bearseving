@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>小吉發大財 V10</title>
+    <title>小吉發大財 V14</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -50,9 +50,13 @@
         .active-tab { background-color: white; color: black; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .inactive-tab { color: #636366; }
         
-        /* Progress Bar Animation */
         @keyframes fillBar { from { width: 0%; } }
         .progress-fill { animation: fillBar 1s ease-out forwards; }
+        
+        /* Modal Styles */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 999; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px); }
+        .modal-content { background: white; width: 100%; max-width: 320px; border-radius: 16px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: popUp 0.2s ease-out; }
+        @keyframes popUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
     </style>
 </head>
 <body class="pb-24">
@@ -82,62 +86,165 @@
             return [storedValue, setValue];
         };
 
-        const DEFAULTS = {
-            rent: { label: '房租', amount: 9974, icon: 'fa-house' },
-            mgmt: { label: '管理費', amount: 1410, icon: 'fa-building' },
-            car: { label: '車貸', amount: 20000, icon: 'fa-car' },
-            scooter: { label: '機車貸', amount: 7000, icon: 'fa-motorcycle' },
-            baby: { label: '77寶貝', amount: 30000, icon: 'fa-heart' },
-            credit: { label: '信用卡', amount: 0, icon: 'fa-credit-card' },
-            other: { label: '其他', amount: '', icon: 'fa-basket-shopping' }
+        const INITIAL_CATEGORIES = [
+            { id: 'rent', label: '房租', amount: 9974, icon: 'fa-house' },
+            { id: 'mgmt', label: '管理費', amount: 1410, icon: 'fa-building' },
+            { id: 'car', label: '車貸', amount: 20000, icon: 'fa-car' },
+            { id: 'scooter', label: '機車貸', amount: 7000, icon: 'fa-motorcycle' },
+            { id: 'baby', label: '77寶貝', amount: 30000, icon: 'fa-heart' },
+            { id: 'credit', label: '信用卡', amount: 0, icon: 'fa-credit-card' },
+            { id: 'other', label: '其他', amount: '', icon: 'fa-basket-shopping' }
+        ];
+
+        // --- 全用刪除確認 Modal ---
+        const ConfirmDeleteModal = ({ isOpen, onClose, onConfirm, title = "確定刪除嗎？" }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="modal-overlay" onClick={onClose}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <div className="text-center mb-6">
+                            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3 text-red-500 text-xl">
+                                <i className="fa-solid fa-trash-can"></i>
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-800">{title}</h3>
+                            <p className="text-xs text-gray-400 mt-1">刪除後無法復原</p>
+                        </div>
+                        <div className="flex gap-3">
+                            <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl text-sm active:bg-gray-200">
+                                取消
+                            </button>
+                            <button onClick={onConfirm} className="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl text-sm shadow-md active:bg-red-600">
+                                確認刪除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
         };
 
-        const ExpenseForm = ({ onAdd }) => {
-            const [type, setType] = useState('other');
-            const [vals, setVals] = useState({ date: getLocalISODate(), name: '', amount: '' });
-            const handleTypeSelect = (key) => {
-                setType(key);
-                setVals(prev => ({
-                    ...prev,
-                    name: key === 'other' ? '' : DEFAULTS[key].label,
-                    amount: DEFAULTS[key].amount
-                }));
+        // --- 分類管理 Modal ---
+        const CategoryManagerModal = ({ isOpen, onClose, categories, setCategories }) => {
+            const [newLabel, setNewLabel] = useState('');
+            const [newAmount, setNewAmount] = useState('');
+            const [deleteTarget, setDeleteTarget] = useState(null); // 暫存要刪除的ID
+
+            if (!isOpen) return null;
+
+            const handleAdd = () => {
+                if (!newLabel) return;
+                const newCat = {
+                    id: Date.now().toString(),
+                    label: newLabel,
+                    amount: newAmount,
+                    icon: 'fa-tag'
+                };
+                setCategories([...categories, newCat]);
+                setNewLabel('');
+                setNewAmount('');
             };
+
+            const confirmDeleteCategory = () => {
+                if(deleteTarget) {
+                    setCategories(categories.filter(c => c.id !== deleteTarget));
+                    setDeleteTarget(null);
+                }
+            };
+
+            return (
+                <div className="modal-overlay" onClick={onClose}>
+                    <div className="modal-content max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        {/* 這裡我們嵌套一個簡單的確認邏輯，避免視窗疊視窗太複雜 */}
+                        {deleteTarget ? (
+                            <div className="text-center py-4">
+                                <h3 className="font-bold text-red-500 mb-4">確定刪除此分類？</h3>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setDeleteTarget(null)} className="flex-1 bg-gray-200 py-2 rounded-lg text-sm font-bold">取消</button>
+                                    <button onClick={confirmDeleteCategory} className="flex-1 bg-red-500 text-white py-2 rounded-lg text-sm font-bold">刪除</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <h3 className="text-lg font-bold text-gray-800 mb-4">管理支出分類</h3>
+                                <div className="mb-4 space-y-2">
+                                    {categories.map(cat => (
+                                        <div key={cat.id} className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                            <div className="flex items-center gap-2">
+                                                <i className={`fa-solid ${cat.icon} text-gray-400 w-5 text-center`}></i>
+                                                <span className="font-bold text-gray-700">{cat.label}</span>
+                                                {cat.amount && <span className="text-xs text-gray-400">(${cat.amount})</span>}
+                                            </div>
+                                            {cat.id !== 'other' && (
+                                                <button onClick={() => setDeleteTarget(cat.id)} className="w-8 h-8 flex items-center justify-center text-red-400 hover:text-red-600 bg-white rounded-full shadow-sm">
+                                                    <i className="fa-solid fa-trash-can"></i>
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="border-t border-gray-100 pt-4">
+                                    <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">新增分類</h4>
+                                    <div className="flex gap-2 mb-2">
+                                        <input type="text" className="input-field text-sm" placeholder="名稱" value={newLabel} onChange={e => setNewLabel(e.target.value)} />
+                                        <input type="number" inputMode="decimal" className="input-field text-sm w-24" placeholder="預設$" value={newAmount} onChange={e => setNewAmount(e.target.value)} />
+                                    </div>
+                                    <button onClick={handleAdd} className="w-full bg-morandi-main text-white rounded-lg py-2 font-bold text-sm shadow-sm">+ 新增</button>
+                                </div>
+                                <button onClick={onClose} className="w-full mt-4 text-gray-400 text-sm py-2">關閉</button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Forms ---
+        const ExpenseForm = ({ onAdd, categories, setCategories }) => {
+            const [selectedId, setSelectedId] = useState('other');
+            const [vals, setVals] = useState({ date: getLocalISODate(), name: '', amount: '' });
+            const [isManageOpen, setIsManageOpen] = useState(false);
+
+            useEffect(() => {
+                if (selectedId !== 'other' && !categories.find(c => c.id === selectedId)) {
+                    setSelectedId('other');
+                }
+            }, [categories, selectedId]);
+
+            const handleTypeSelect = (cat) => {
+                setSelectedId(cat.id);
+                setVals(prev => ({ ...prev, name: cat.id === 'other' ? '' : cat.label, amount: cat.amount }));
+            };
+
             const handleSubmit = () => {
                 if (!vals.name || !vals.amount) return;
-                onAdd({ ...vals, category: type });
+                onAdd({ ...vals, category: selectedId });
                 setVals({ date: vals.date, name: '', amount: '' });
-                setType('other');
+                setSelectedId('other');
             };
+
             return (
                 <div className="ios-card">
-                    <div className="ios-header"><span className="ios-header-title">新增支出紀錄</span></div>
+                    <div className="ios-header flex justify-between items-center">
+                        <span className="ios-header-title">新增支出紀錄</span>
+                        <button onClick={() => setIsManageOpen(true)} className="text-xs text-ios-blue font-bold flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg">
+                            <i className="fa-solid fa-gear"></i> 設定
+                        </button>
+                    </div>
                     <div className="p-4 space-y-4">
                         <div className="flex flex-wrap gap-2">
-                            {Object.entries(DEFAULTS).map(([key, cfg]) => (
-                                <button key={key} onClick={() => handleTypeSelect(key)} className={`tag-btn ${type === key ? 'tag-btn-active' : 'tag-btn-inactive'}`}>
-                                    <i className={`fa-solid ${cfg.icon}`}></i> {cfg.label}
+                            {categories.map((cat) => (
+                                <button key={cat.id} onClick={() => handleTypeSelect(cat)} className={`tag-btn ${selectedId === cat.id ? 'tag-btn-active' : 'tag-btn-inactive'}`}>
+                                    <i className={`fa-solid ${cat.icon}`}></i> {cat.label}
                                 </button>
                             ))}
                         </div>
-                        <div>
-                            <div className="input-label">日期</div>
-                            <input type="date" value={vals.date} onChange={e => setVals({...vals, date: e.target.value})} className="input-field" />
-                        </div>
+                        <div><div className="input-label">日期</div><input type="date" value={vals.date} onChange={e => setVals({...vals, date: e.target.value})} className="input-field" /></div>
                         <div className="flex gap-3">
-                            <div className="flex-[1.5]">
-                                <div className="input-label">項目名稱</div>
-                                <input type="text" value={vals.name} onChange={e => setVals({...vals, name: e.target.value})} className="input-field" placeholder="項目" />
-                            </div>
-                            <div className="flex-1">
-                                <div className="input-label">金額</div>
-                                <input type="number" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field font-bold text-red-500" placeholder="$" />
-                            </div>
+                            <div className="flex-[1.5]"><div className="input-label">項目名稱</div><input type="text" value={vals.name} onChange={e => setVals({...vals, name: e.target.value})} className="input-field" placeholder="項目" /></div>
+                            <div className="flex-1"><div className="input-label">金額</div><input type="number" inputMode="decimal" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field font-bold text-red-500" placeholder="$" /></div>
                         </div>
-                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-morandi-main shadow-sm active:opacity-90">
-                            <i className="fa-solid fa-plus mr-1"></i> 加入支出
-                        </button>
+                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-morandi-main shadow-sm active:opacity-90"><i className="fa-solid fa-plus mr-1"></i> 加入支出</button>
                     </div>
+                    <CategoryManagerModal isOpen={isManageOpen} onClose={() => setIsManageOpen(false)} categories={categories} setCategories={setCategories} />
                 </div>
             );
         };
@@ -158,28 +265,14 @@
                     <div className="ios-header"><span className="ios-header-title">新增工時 (我做的)</span></div>
                     <div className="p-4 space-y-4">
                         <div className="flex gap-3">
-                            <div className="flex-1">
-                                <div className="input-label">日期</div>
-                                <input type="date" value={vals.date} onChange={e => setVals({...vals, date: e.target.value})} className="input-field" />
-                            </div>
-                            <div className="flex-1">
-                                <div className="input-label">工地/備註</div>
-                                <input type="text" value={vals.note} onChange={e => setVals({...vals, note: e.target.value})} className="input-field" placeholder="備註" />
-                            </div>
+                            <div className="flex-1"><div className="input-label">日期</div><input type="date" value={vals.date} onChange={e => setVals({...vals, date: e.target.value})} className="input-field" /></div>
+                            <div className="flex-1"><div className="input-label">工地/備註</div><input type="text" value={vals.note} onChange={e => setVals({...vals, note: e.target.value})} className="input-field" placeholder="備註" /></div>
                         </div>
                         <div className="flex gap-3">
-                            <div className="flex-1">
-                                <div className="input-label">做幾工 ($3000/工)</div>
-                                <input type="number" value={vals.days} onChange={e => handleDaysChange(e.target.value)} className="input-field text-center font-bold text-purple-600" placeholder="0.5 / 1" step="0.5" />
-                            </div>
-                            <div className="flex-1">
-                                <div className="input-label">預計收入</div>
-                                <input type="number" value={vals.amount} readOnly className="input-field font-bold bg-gray-50 text-gray-500" />
-                            </div>
+                            <div className="flex-1"><div className="input-label">做幾工 ($3000/工)</div><input type="number" inputMode="decimal" value={vals.days} onChange={e => handleDaysChange(e.target.value)} className="input-field text-center font-bold text-purple-600" placeholder="0.5 / 1" step="0.5" /></div>
+                            <div className="flex-1"><div className="input-label">預計收入</div><input type="number" inputMode="decimal" value={vals.amount} readOnly className="input-field font-bold bg-gray-50 text-gray-500" /></div>
                         </div>
-                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-ios-purple shadow-sm active:opacity-90">
-                            <i className="fa-solid fa-person-digging mr-1"></i> 紀錄做工
-                        </button>
+                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-ios-purple shadow-sm active:opacity-90"><i className="fa-solid fa-person-digging mr-1"></i> 紀錄做工</button>
                     </div>
                 </div>
             );
@@ -201,65 +294,38 @@
                     <div className="ios-header"><span className="ios-header-title text-ios-green">紀錄已領 (我領的)</span></div>
                     <div className="p-4 space-y-4">
                         <div className="flex gap-3">
-                            <div className="flex-1">
-                                <div className="input-label">日期</div>
-                                <input type="date" value={vals.date} onChange={e => setVals({...vals, date: e.target.value})} className="input-field" />
-                            </div>
-                            <div className="flex-1">
-                                <div className="input-label">備註</div>
-                                <input type="text" value={vals.note} onChange={e => setVals({...vals, note: e.target.value})} className="input-field" placeholder="如: 7/5領錢" />
-                            </div>
+                            <div className="flex-1"><div className="input-label">日期</div><input type="date" value={vals.date} onChange={e => setVals({...vals, date: e.target.value})} className="input-field" /></div>
+                            <div className="flex-1"><div className="input-label">備註</div><input type="text" value={vals.note} onChange={e => setVals({...vals, note: e.target.value})} className="input-field" placeholder="如: 7/5領錢" /></div>
                         </div>
                         <div className="flex gap-3">
-                            <div className="flex-1">
-                                <div className="input-label">領幾工</div>
-                                <input type="number" value={vals.days} onChange={e => handleDaysChange(e.target.value)} className="input-field text-center font-bold text-green-600" placeholder="工數" />
-                            </div>
-                            <div className="flex-1">
-                                <div className="input-label">實際金額</div>
-                                <input type="number" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field font-bold text-black" />
-                            </div>
+                            <div className="flex-1"><div className="input-label">領幾工</div><input type="number" inputMode="decimal" value={vals.days} onChange={e => handleDaysChange(e.target.value)} className="input-field text-center font-bold text-green-600" placeholder="工數" /></div>
+                            <div className="flex-1"><div className="input-label">實際金額</div><input type="number" inputMode="decimal" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field font-bold text-black" /></div>
                         </div>
-                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-ios-green shadow-sm active:opacity-90">
-                            <i className="fa-solid fa-money-bill-wave mr-1"></i> 紀錄已領
-                        </button>
+                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm bg-ios-green shadow-sm active:opacity-90"><i className="fa-solid fa-money-bill-wave mr-1"></i> 紀錄已領</button>
                     </div>
                 </div>
             );
         };
 
-        const ListItem = ({ item, onDelete, type }) => {
-            const day = item.date.split('-')[2];
-            let colorClass = 'bg-morandi-main';
-            let amountClass = 'text-gray-800';
-            let prefix = '';
-            let label = item.name || item.note;
-
-            if (type === 'income') { colorClass = 'bg-ios-green'; amountClass = 'text-ios-green'; prefix = '+'; }
-            else if (type === 'expense') { colorClass = 'bg-morandi-pink'; amountClass = 'text-gray-800'; prefix = '-'; }
-            else if (type === 'work_log') { colorClass = 'bg-ios-purple'; amountClass = 'text-ios-purple'; prefix = '+'; label = `做工: ${label || ''}` }
-            else if (type === 'work_withdraw') { colorClass = 'bg-ios-green'; amountClass = 'text-green-600'; prefix = '領'; label = `已領: ${label || ''}` }
-            else if (type === 'dad') { colorClass = 'bg-ios-blue'; amountClass = 'text-ios-blue'; prefix = '+'; }
-            else if (type === 'pay_worker') { colorClass = 'bg-gray-500'; amountClass = 'text-gray-800'; prefix = '-'; }
-
+        const ProjectExpenseForm = ({ onAdd }) => {
+            const [vals, setVals] = useState({ date: getLocalISODate(), note: '', amount: '' });
+            const handleSubmit = () => {
+                if (!vals.amount) return;
+                onAdd(vals);
+                setVals({ date: vals.date, note: '', amount: '' });
+            };
             return (
-                <div className="flex justify-between items-center py-3 border-b border-gray-100 last:border-0 animate-fade-in">
-                    <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm flex-shrink-0 ${colorClass}`}>
-                            {day}
+                <div className="ios-card border-l-4 border-ios-orange">
+                    <div className="ios-header"><span className="ios-header-title text-ios-orange">工地支出 (雜支/材料)</span></div>
+                    <div className="p-4 space-y-4">
+                        <div className="flex gap-3">
+                            <div className="flex-1"><div className="input-label">日期</div><input type="date" value={vals.date} onChange={e => setVals({...vals, date: e.target.value})} className="input-field" /></div>
+                            <div className="flex-[1.5]"><div className="input-label">項目 (便當、飲料...)</div><input type="text" value={vals.note} onChange={e => setVals({...vals, note: e.target.value})} className="input-field" placeholder="項目" /></div>
                         </div>
-                        <div>
-                            <div className="font-bold text-gray-800 text-base leading-tight">{label}</div>
-                            {item.days && <div className="text-xs text-gray-400 mt-0.5 font-bold">{item.days} 工</div>}
+                        <div className="flex gap-3">
+                            <div className="flex-[2]"><div className="input-label">金額</div><input type="number" inputMode="decimal" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field font-bold text-orange-600" placeholder="$" /></div>
+                            <button onClick={handleSubmit} className="flex-1 rounded-lg text-white font-bold text-sm bg-ios-orange shadow-sm active:opacity-90"><i className="fa-solid fa-plus"></i></button>
                         </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <span className={`font-bold text-base ${amountClass}`}>
-                            {prefix}{fmt(item.amount)}
-                        </span>
-                        <button onClick={() => onDelete(item.id)} className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-full text-gray-300 hover:text-red-500 transition-colors">
-                            <i className="fa-solid fa-trash-can text-xs"></i>
-                        </button>
                     </div>
                 </div>
             );
@@ -281,10 +347,8 @@
                             <input type="text" value={vals.note} onChange={e => setVals({...vals, note: e.target.value})} className="input-field flex-[1.5]" placeholder="備註" />
                         </div>
                         <div className="flex gap-2">
-                            <input type="number" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className={`input-field flex-[2] font-bold ${inputColor}`} placeholder="$ 金額" />
-                            <button onClick={handleSubmit} className={`flex-1 rounded-lg text-white font-bold text-sm ${btnColor}`}>
-                                <i className="fa-solid fa-plus"></i>
-                            </button>
+                            <input type="number" inputMode="decimal" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className={`input-field flex-[2] font-bold ${inputColor}`} placeholder="$ 金額" />
+                            <button onClick={handleSubmit} className={`flex-1 rounded-lg text-white font-bold text-sm ${btnColor}`}><i className="fa-solid fa-plus"></i></button>
                         </div>
                     </div>
                 </div>
@@ -312,15 +376,53 @@
                          </div>
                          <div className="flex gap-2">
                              <div className="flex-1 relative">
-                                 <input type="number" value={vals.days} onChange={e => handleDaysChange(e.target.value)} className="input-field text-center font-bold" placeholder="工數" />
+                                 <input type="number" inputMode="decimal" value={vals.days} onChange={e => handleDaysChange(e.target.value)} className="input-field text-center font-bold" placeholder="工數" />
                                  <span className="absolute right-3 top-3 text-xs text-gray-400 pointer-events-none">工</span>
                              </div>
-                             <input type="number" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field flex-[1.5] font-bold" placeholder="$" />
+                             <input type="number" inputMode="decimal" value={vals.amount} onChange={e => setVals({...vals, amount: e.target.value})} className="input-field flex-[1.5] font-bold" placeholder="$" />
                          </div>
                          <button onClick={handleSubmit} className="w-full py-3 rounded-lg text-white font-bold text-sm bg-morandi-main">發放薪資</button>
                      </div>
                  </div>
              );
+        };
+
+        const ListItem = ({ item, onDelete, type }) => {
+            const day = item.date.split('-')[2];
+            let colorClass = 'bg-morandi-main';
+            let amountClass = 'text-gray-800';
+            let prefix = '';
+            let label = item.name || item.note;
+
+            if (type === 'income') { colorClass = 'bg-ios-green'; amountClass = 'text-ios-green'; prefix = '+'; }
+            else if (type === 'expense') { colorClass = 'bg-morandi-pink'; amountClass = 'text-gray-800'; prefix = '-'; }
+            else if (type === 'work_log') { colorClass = 'bg-ios-purple'; amountClass = 'text-ios-purple'; prefix = '+'; label = `做工: ${label || ''}` }
+            else if (type === 'work_withdraw') { colorClass = 'bg-ios-green'; amountClass = 'text-green-600'; prefix = '領'; label = `已領: ${label || ''}` }
+            else if (type === 'dad') { colorClass = 'bg-ios-blue'; amountClass = 'text-ios-blue'; prefix = '+'; }
+            else if (type === 'pay_worker') { colorClass = 'bg-gray-500'; amountClass = 'text-gray-800'; prefix = '-'; }
+            else if (type === 'project_expense') { colorClass = 'bg-ios-orange'; amountClass = 'text-gray-800'; prefix = '-'; label = `雜支: ${label || ''}` }
+
+            return (
+                <div className="flex justify-between items-center py-3 border-b border-gray-100 last:border-0 animate-fade-in">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm flex-shrink-0 ${colorClass}`}>
+                            {day}
+                        </div>
+                        <div>
+                            <div className="font-bold text-gray-800 text-base leading-tight">{label}</div>
+                            {item.days && <div className="text-xs text-gray-400 mt-0.5 font-bold">{item.days} 工</div>}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className={`font-bold text-base ${amountClass}`}>
+                            {prefix}{fmt(item.amount)}
+                        </span>
+                        <button onClick={() => onDelete(item.id)} className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-full text-gray-300 hover:text-red-500 transition-colors">
+                            <i className="fa-solid fa-trash-can text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            );
         };
 
         const ProgressBar = ({ current, target }) => {
@@ -337,10 +439,7 @@
                         </span>
                     </div>
                     <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden">
-                        <div 
-                            className={`h-full transition-all duration-1000 ease-out progress-fill ${isDone ? 'bg-morandi-gold' : 'bg-morandi-main'}`} 
-                            style={{ width: `${pct}%` }}
-                        ></div>
+                        <div className={`h-full transition-all duration-1000 ease-out progress-fill ${isDone ? 'bg-morandi-gold' : 'bg-morandi-main'}`} style={{ width: `${pct}%` }}></div>
                     </div>
                     <div className="flex justify-between mt-1 text-[10px] text-gray-400">
                         <span>$0</span>
@@ -353,13 +452,13 @@
         const App = () => {
             const [activeTab, setActiveTab] = useState('personal'); 
             const [currentDate, setCurrentDate] = useState(new Date());
-            
-            // Try to read old data keys first, if not found, use new keys.
-            // But to simplify for this user, we will stick to v9 keys for data continuity if they used previous step.
-            // If they are new, it defaults to empty.
-            // Note: I will use 'ji_transactions_v9' as key to maintain data from previous step.
             const [target, setTarget] = useLocalStorage('ji_target_v9', 100000); 
             const [transactions, setTransactions] = useLocalStorage('ji_transactions_v9', []);
+            const [expenseCategories, setExpenseCategories] = useLocalStorage('ji_categories_v12', INITIAL_CATEGORIES);
+            
+            // 全域刪除確認 State
+            const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+            const [transactionToDelete, setTransactionToDelete] = useState(null);
 
             const yearMonth = useMemo(() => {
                 const y = currentDate.getFullYear();
@@ -380,29 +479,48 @@
             const expenseList = monthlyData.filter(t => t.type === 'expense');
             const workLogList = monthlyData.filter(t => t.type === 'work_log');
             const workWithdrawList = monthlyData.filter(t => t.type === 'work_withdraw');
+            
+            // Project
             const dadList = monthlyData.filter(t => t.type === 'dad');
             const payWorkerList = monthlyData.filter(t => t.type === 'pay_worker');
+            const projectExpenseList = monthlyData.filter(t => t.type === 'project_expense');
 
+            // Personal Stats
             const totalIncome = incomeList.reduce((sum, t) => sum + Number(t.amount), 0);
             const totalExpense = expenseList.reduce((sum, t) => sum + Number(t.amount), 0);
             const monthlySavings = totalIncome - totalExpense;
 
+            // Work Hours Stats
             const totalWorkDays = workLogList.reduce((sum, t) => sum + Number(t.days || 0), 0);
             const totalWorkEarnings = workLogList.reduce((sum, t) => sum + Number(t.amount), 0);
             const totalWithdrawAmount = workWithdrawList.reduce((sum, t) => sum + Number(t.amount), 0);
             const unpaidAmount = totalWorkEarnings - totalWithdrawAmount;
 
+            // Project Stats
             const totalDad = dadList.reduce((sum, t) => sum + Number(t.amount), 0);
             const totalPay = payWorkerList.reduce((sum, t) => sum + Number(t.amount), 0);
-            const projectBalance = totalDad - totalPay;
+            const totalProjExp = projectExpenseList.reduce((sum, t) => sum + Number(t.amount), 0);
+            const projectBalance = totalDad - totalPay - totalProjExp;
 
             const addTrans = (type, data) => {
                 const newT = { id: Date.now(), type, ...data, amount: Number(data.amount) };
                 if (!newT.date.startsWith(yearMonth)) alert(`紀錄已新增至 ${newT.date}，請切換月份查看`);
                 setTransactions(prev => [newT, ...prev]);
             };
-            const removeTrans = (id) => {
-                if (confirm('確定刪除？')) setTransactions(prev => prev.filter(t => t.id !== id));
+
+            // Trigger Delete Modal
+            const requestDelete = (id) => {
+                setTransactionToDelete(id);
+                setDeleteModalOpen(true);
+            };
+
+            // Actual Delete
+            const confirmDeleteTransaction = () => {
+                if(transactionToDelete) {
+                    setTransactions(prev => prev.filter(t => t.id !== transactionToDelete));
+                    setDeleteModalOpen(false);
+                    setTransactionToDelete(null);
+                }
             };
 
             const canvasRef = useRef(null);
@@ -428,6 +546,13 @@
 
             return (
                 <div className="max-w-md mx-auto min-h-screen">
+                    {/* Delete Modal */}
+                    <ConfirmDeleteModal 
+                        isOpen={deleteModalOpen}
+                        onClose={() => setDeleteModalOpen(false)}
+                        onConfirm={confirmDeleteTransaction}
+                    />
+
                     <div className="sticky top-0 z-50 bg-[#F2F2F7]/95 backdrop-blur-md px-4 py-3 border-b border-gray-200">
                         <div className="flex justify-between items-center bg-white rounded-xl p-1 shadow-sm">
                             <button onClick={prevMonth} className="w-10 h-8 text-gray-400 hover:text-ios-blue active:scale-90 transition-transform"><i className="fa-solid fa-chevron-left"></i></button>
@@ -450,26 +575,28 @@
                                         <span className="text-xs font-bold opacity-80 uppercase tracking-widest">本月結餘</span>
                                         <div className="flex items-center gap-2 bg-white/10 px-2 py-1 rounded-lg backdrop-blur-sm">
                                             <span className="text-xs opacity-70">目標</span>
-                                            <input type="number" value={target} onChange={(e) => setTarget(e.target.value)} className="w-16 bg-transparent text-right text-xs font-bold outline-none text-white" />
+                                            <input type="number" inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} className="w-16 bg-transparent text-right text-xs font-bold outline-none text-white" />
                                         </div>
                                     </div>
                                     <div className={`text-4xl font-rounded font-bold mb-4 tracking-tight relative z-10 ${monthlySavings < 0 ? 'text-red-200' : ''}`}>${fmt(monthlySavings)}</div>
                                 </div>
-                                
-                                {/* 新增：目標進度條 */}
                                 <ProgressBar current={monthlySavings} target={target} />
-
                                 <SimpleInput title={`薪資收入 ($${fmt(totalIncome)})`} onAdd={(d) => addTrans('income', d)} btnColor="bg-ios-green" inputColor="text-ios-green"/>
-                                {incomeList.map(t => <ListItem key={t.id} item={t} onDelete={removeTrans} type="income" />)}
-
-                                <ExpenseForm onAdd={(d) => addTrans('expense', d)} />
+                                {incomeList.map(t => <ListItem key={t.id} item={t} onDelete={requestDelete} type="income" />)}
+                                
+                                <ExpenseForm 
+                                    onAdd={(d) => addTrans('expense', d)} 
+                                    categories={expenseCategories}
+                                    setCategories={setExpenseCategories}
+                                />
+                                
                                 <div className="bg-white rounded-xl px-4 py-2 mb-4">
                                     <div className="text-xs text-gray-400 font-bold uppercase py-2 border-b border-gray-50 flex justify-between">
                                         <span>支出列表</span>
                                         <span>總計: ${fmt(totalExpense)}</span>
                                     </div>
                                     {expenseList.length === 0 && <div className="text-center text-xs text-gray-300 py-4">無支出</div>}
-                                    {expenseList.map(t => <ListItem key={t.id} item={t} onDelete={removeTrans} type="expense" />)}
+                                    {expenseList.map(t => <ListItem key={t.id} item={t} onDelete={requestDelete} type="expense" />)}
                                 </div>
                                 <div className="bg-white rounded-xl p-4 shadow-sm mb-8 h-64"><canvas ref={canvasRef}></canvas></div>
                             </div>
@@ -495,13 +622,11 @@
                                         </div>
                                     </div>
                                 </div>
-
                                 <WorkHoursForm onAdd={(d) => addTrans('work_log', d)} />
                                 <WorkWithdrawForm onAdd={(d) => addTrans('work_withdraw', d)} />
-
                                 <div className="bg-white rounded-xl px-4 py-2 mb-8">
                                     <div className="text-xs text-gray-400 font-bold uppercase py-2 border-b border-gray-50">本月工時紀錄表</div>
-                                    {[...workLogList, ...workWithdrawList].sort((a,b) => new Date(b.date) - new Date(a.date)).map(t => <ListItem key={t.id} item={t} onDelete={removeTrans} type={t.type} />)}
+                                    {[...workLogList, ...workWithdrawList].sort((a,b) => new Date(b.date) - new Date(a.date)).map(t => <ListItem key={t.id} item={t} onDelete={requestDelete} type={t.type} />)}
                                     {workLogList.length === 0 && workWithdrawList.length === 0 && <div className="text-center text-xs text-gray-300 py-4">無紀錄</div>}
                                 </div>
                             </div>
@@ -513,13 +638,21 @@
                                     <p className="text-gray-400 text-xs font-bold uppercase mb-2">工地帳戶餘額</p>
                                     <div className={`text-4xl font-rounded font-bold mb-2 ${projectBalance < 0 ? 'text-red-500' : 'text-gray-800'}`}>${fmt(projectBalance)}</div>
                                 </div>
+                                
                                 <SimpleInput title={`資金入帳 ($${fmt(totalDad)})`} onAdd={(d) => addTrans('dad', d)} btnColor="bg-ios-blue" inputColor="text-ios-blue"/>
-                                {dadList.map(t => <ListItem key={t.id} item={t} onDelete={removeTrans} type="dad" />)}
+                                {dadList.map(t => <ListItem key={t.id} item={t} onDelete={requestDelete} type="dad" />)}
+                                
                                 <ProjectPaymentForm title={`發薪水 ($${fmt(totalPay)})`} onAdd={(d) => addTrans('pay_worker', d)} />
+                                {payWorkerList.map(t => <ListItem key={t.id} item={t} onDelete={requestDelete} type="pay_worker" />)}
+                                
+                                <ProjectExpenseForm onAdd={(d) => addTrans('project_expense', d)} />
                                 <div className="bg-white rounded-xl px-4 py-2 mb-8">
-                                    <div className="text-xs text-gray-400 font-bold uppercase py-2 border-b border-gray-50">發放紀錄</div>
-                                    {payWorkerList.length === 0 && <div className="text-center text-xs text-gray-300 py-4">無紀錄</div>}
-                                    {payWorkerList.map(t => <ListItem key={t.id} item={t} onDelete={removeTrans} type="pay_worker" />)}
+                                    <div className="text-xs text-gray-400 font-bold uppercase py-2 border-b border-gray-50 flex justify-between">
+                                        <span>雜支列表</span>
+                                        <span>總計: ${fmt(totalProjExp)}</span>
+                                    </div>
+                                    {projectExpenseList.length === 0 && <div className="text-center text-xs text-gray-300 py-4">無支出</div>}
+                                    {projectExpenseList.map(t => <ListItem key={t.id} item={t} onDelete={requestDelete} type="project_expense" />)}
                                 </div>
                             </div>
                         )}
