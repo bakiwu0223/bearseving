@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>小吉發大財 V7 Auto</title>
+    
+    <!-- React & Tailwind -->
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Zen+Maru+Gothic:wght@700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ios: { bg: '#F2F2F7', card: '#FFFFFF', blue: '#007AFF', green: '#34C759', red: '#FF3B30', gray: '#8E8E93', border: '#E5E5EA' },
+                        morandi: { main: '#778DA9', pink: '#F4ACB7', light: '#E0E1DD' }
+                    },
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', '"Noto Sans TC"', 'sans-serif'],
+                        rounded: ['"Zen Maru Gothic"', 'sans-serif'],
+                    },
+                    boxShadow: { 'ios': '0 2px 10px rgba(0,0,0,0.05)' }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #F2F2F7; -webkit-tap-highlight-color: transparent; padding-bottom: env(safe-area-inset-bottom); }
+        .ios-card { background: white; border-radius: 12px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .ios-header { padding: 12px 16px; border-bottom: 1px solid #F2F2F7; }
+        .ios-header-title { font-size: 13px; font-weight: 700; color: #8E8E93; text-transform: uppercase; letter-spacing: 0.5px; }
+        .input-label { font-size: 12px; color: #8E8E93; font-weight: 600; margin-left: 4px; margin-bottom: 4px; }
+        .input-field { background: #F2F2F7; border-radius: 8px; padding: 12px; font-size: 16px; outline: none; width: 100%; border: 1px solid transparent; transition: all 0.2s; appearance: none; }
+        .input-field:focus { background: white; border-color: #E5E5EA; box-shadow: 0 0 0 2px rgba(0,122,255,0.1); }
+        
+        .segment-control { background-color: #E5E5EA; padding: 2px; border-radius: 9px; display: flex; margin-bottom: 20px; }
+        .segment-btn { flex: 1; padding: 6px; text-align: center; border-radius: 7px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+        .active-tab { background-color: white; color: black; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .inactive-tab { color: #636366; }
+    </style>
+</head>
+<body class="pb-24">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+        // --- 工具函數 ---
+        const getLocalISODate = () => {
+            const now = new Date();
+            const offset = now.getTimezoneOffset() * 60000;
+            return new Date(now - offset).toISOString().slice(0, 10);
+        };
+
+        const fmt = (num) => new Intl.NumberFormat('zh-TW').format(num);
+
+        const useLocalStorage = (key, initialValue) => {
+            const [storedValue, setStoredValue] = useState(() => {
+                try {
+                    const item = window.localStorage.getItem(key);
+                    return item ? JSON.parse(item) : initialValue;
+                } catch (error) { return initialValue; }
+            });
+            const setValue = (value) => {
+                const valueToStore = value instanceof Function ? value(storedValue) : value;
+                setStoredValue(valueToStore);
+                window.localStorage.setItem(key, JSON.stringify(valueToStore));
+            };
+            return [storedValue, setValue];
+        };
+
+        // --- 一般輸入組件 (收入、每日支出、資金入帳) ---
+        const InputStack = ({ title, inputs, onAdd, btnColor = 'bg-morandi-main', btnText = '新增紀錄' }) => {
+            const [vals, setVals] = useState({ date: getLocalISODate() });
+
+            const handleChange = (key, value) => {
+                setVals(prev => ({ ...prev, [key]: value }));
+            };
+
+            const handleSubmit = () => {
+                if (!vals.amount) return;
+                onAdd(vals);
+                const currentDay = vals.date; 
+                setVals({ date: currentDay, note: '', name: '', amount: '', days: '' });
+            };
+
+            return (
+                <div className="ios-card">
+                    <div className="ios-header flex justify-between">
+                        <span className="ios-header-title">{title}</span>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        {inputs.some(i => i.key === 'date') && (
+                            <div>
+                                <div className="input-label">日期</div>
+                                <input type="date" value={vals.date} onChange={(e) => handleChange('date', e.target.value)} className="input-field" />
+                            </div>
+                        )}
+                        {inputs.filter(i => i.key !== 'date').map((inp, idx) => (
+                            <div key={idx} className={inp.className || ''}>
+                                {inp.label && <div className="input-label">{inp.label}</div>}
+                                <input 
+                                    type={inp.type || 'text'} 
+                                    placeholder={inp.placeholder}
+                                    value={vals[inp.key] || ''}
+                                    onChange={(e) => handleChange(inp.key, e.target.value)}
+                                    className={`input-field ${inp.inputClass || ''}`}
+                                />
+                            </div>
+                        ))}
+                        <button onClick={handleSubmit} className={`w-full py-3.5 rounded-lg text-white font-bold text-sm shadow-sm active:opacity-90 transition-opacity ${btnColor}`}>
+                            <i className="fa-solid fa-plus mr-1"></i> {btnText}
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- [專用] 工資輸入組件 (含自動計算 $3000/工) ---
+        const WorkWageForm = ({ title, onAdd }) => {
+            const [vals, setVals] = useState({ 
+                date: getLocalISODate(),
+                name: '',
+                days: '',
+                amount: ''
+            });
+
+            const WAGE_PER_DAY = 3000;
+
+            const handleDaysChange = (val) => {
+                // 當輸入工數時，自動計算金額
+                const days = val;
+                const newAmount = days ? days * WAGE_PER_DAY : '';
+                setVals(prev => ({ ...prev, days: days, amount: newAmount }));
+            };
+
+            const handleSubmit = () => {
+                if (!vals.name || !vals.amount) return;
+                onAdd(vals);
+                // 重置 (保留日期)
+                setVals(prev => ({ ...prev, name: '', days: '', amount: '' }));
+            };
+
+            return (
+                <div className="ios-card">
+                    <div className="ios-header flex justify-between">
+                        <span className="ios-header-title">{title}</span>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        <div>
+                            <div className="input-label">發放日期</div>
+                            <input 
+                                type="date" 
+                                value={vals.date}
+                                onChange={e => setVals({...vals, date: e.target.value})}
+                                className="input-field"
+                            />
+                        </div>
+                        <div>
+                            <div className="input-label">領款人姓名</div>
+                            <input 
+                                type="text" 
+                                placeholder="姓名" 
+                                value={vals.name}
+                                onChange={e => setVals({...vals, name: e.target.value})}
+                                className="input-field"
+                            />
+                        </div>
+                        {/* 工數與金額並排，但手機上會自動換行如果空間不夠，這裡用 Stack */}
+                        <div className="flex gap-3">
+                            <div className="flex-1">
+                                <div className="input-label">工數 (1工=${WAGE_PER_DAY})</div>
+                                <input 
+                                    type="number" 
+                                    placeholder="幾工" 
+                                    value={vals.days}
+                                    onChange={e => handleDaysChange(e.target.value)}
+                                    className="input-field text-center font-bold text-gray-800"
+                                />
+                            </div>
+                            <div className="flex-[1.5]">
+                                <div className="input-label">總金額 (自動計算)</div>
+                                <input 
+                                    type="number" 
+                                    placeholder="$" 
+                                    value={vals.amount}
+                                    onChange={e => setVals({...vals, amount: e.target.value})}
+                                    className="input-field font-bold text-black"
+                                />
+                            </div>
+                        </div>
+                        
+                        <button onClick={handleSubmit} className="w-full py-3.5 rounded-lg text-white font-bold text-sm shadow-sm active:opacity-90 transition-opacity bg-morandi-main">
+                            <i className="fa-solid fa-plus mr-1"></i> 新增支出紀錄
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const ListItem = ({ item, onDelete, isNegative, subtitle }) => {
+            const day = item.date.split('-')[2];
+            return (
+                <div className="flex justify-between items-center py-3 border-b border-gray-100 last:border-0 animate-fade-in">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm flex-shrink-0 ${isNegative ? 'bg-morandi-pink' : 'bg-morandi-main'}`}>
+                            {day}
+                            <span className="text-[9px] absolute mt-5 opacity-80">日</span>
+                        </div>
+                        <div>
+                            <div className="font-bold text-gray-800 text-base leading-tight">{item.name || item.note}</div>
+                            {subtitle && <div className="text-xs text-gray-500 mt-0.5">{subtitle}</div>}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className={`font-bold text-base ${isNegative ? 'text-gray-800' : 'text-green-600'}`}>
+                            {isNegative ? '-' : '+'}{fmt(item.amount)}
+                        </span>
+                        <button onClick={() => onDelete(item.id)} className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-full text-gray-300 hover:text-red-500 transition-colors">
+                            <i className="fa-solid fa-trash-can text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('personal');
+            const [currentDate, setCurrentDate] = useState(new Date());
+            const [target, setTarget] = useLocalStorage('ji_target_v6', 100000); 
+            const [transactions, setTransactions] = useLocalStorage('ji_transactions_v6', []);
+            const [fixedSettings, setFixedSettings] = useLocalStorage('ji_fixed_v6', { baby: 30000, credit: 0, car: 20000, rent: 9974, bike: 7000 });
+
+            const yearMonth = useMemo(() => {
+                const y = currentDate.getFullYear();
+                const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+                return `${y}-${m}`;
+            }, [currentDate]);
+
+            const displayMonth = `${currentDate.getFullYear()}年 ${currentDate.getMonth() + 1}月`;
+            const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+            const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+
+            const monthlyData = useMemo(() => {
+                return transactions
+                    .filter(t => t.date.startsWith(yearMonth))
+                    .sort((a, b) => new Date(b.date) - new Date(a.date) || b.id - a.id);
+            }, [transactions, yearMonth]);
+
+            const incomeList = monthlyData.filter(t => t.type === 'income');
+            const dailyList = monthlyData.filter(t => t.type === 'daily');
+            const dadList = monthlyData.filter(t => t.type === 'dad');
+            const workList = monthlyData.filter(t => t.type === 'work');
+
+            const totalIncome = incomeList.reduce((sum, t) => sum + Number(t.amount), 0);
+            const totalDaily = dailyList.reduce((sum, t) => sum + Number(t.amount), 0);
+            const totalFixed = fixedSettings.car + fixedSettings.rent + fixedSettings.bike + fixedSettings.baby + fixedSettings.credit;
+            const totalExpense = totalFixed + totalDaily;
+            const monthlySavings = totalIncome - totalExpense;
+
+            const totalDadDeposit = dadList.reduce((sum, t) => sum + Number(t.amount), 0);
+            const totalWorkExp = workList.reduce((sum, t) => sum + Number(t.amount), 0);
+            const workBalance = totalDadDeposit - totalWorkExp;
+
+            const addTransaction = (type, data) => {
+                const finalDate = data.date || getLocalISODate();
+                const newTrans = { 
+                    id: Date.now(), 
+                    type, 
+                    ...data, 
+                    date: finalDate,
+                    amount: Number(data.amount) 
+                };
+                if (!finalDate.startsWith(yearMonth)) alert(`紀錄已新增至 ${finalDate}，請切換月份查看`);
+                setTransactions(prev => [newTrans, ...prev]);
+            };
+
+            const removeTransaction = (id) => {
+                if (confirm('確定刪除此紀錄？')) setTransactions(prev => prev.filter(t => t.id !== id));
+            };
+
+            // Chart
+            const canvasRef = useRef(null);
+            const chartRef = useRef(null);
+            useEffect(() => {
+                if (activeTab === 'personal' && canvasRef.current) {
+                    if (chartRef.current) chartRef.current.destroy();
+                    const ctx = canvasRef.current.getContext('2d');
+                    chartRef.current = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['收入', '支出', '結餘'],
+                            datasets: [{
+                                data: [totalIncome, totalExpense, monthlySavings],
+                                backgroundColor: ['#A7D7C5', '#F4ACB7', '#778DA9'],
+                                borderRadius: 6,
+                                barThickness: 40
+                            }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } }
+                        }
+                    });
+                }
+            }, [activeTab, totalIncome, totalExpense, monthlySavings]);
+
+            return (
+                <div className="max-w-md mx-auto min-h-screen">
+                    <div className="sticky top-0 z-50 bg-[#F2F2F7]/95 backdrop-blur-md px-4 py-3 border-b border-gray-200">
+                        <div className="flex justify-between items-center bg-white rounded-xl p-1 shadow-sm">
+                            <button onClick={prevMonth} className="w-10 h-8 text-gray-400 hover:text-ios-blue active:scale-90 transition-transform"><i className="fa-solid fa-chevron-left"></i></button>
+                            <div className="font-rounded font-bold text-lg text-morandi-main">{displayMonth}</div>
+                            <button onClick={nextMonth} className="w-10 h-8 text-gray-400 hover:text-ios-blue active:scale-90 transition-transform"><i className="fa-solid fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+
+                    <div className="px-4 mt-4">
+                        <div className="segment-control">
+                            <div onClick={() => setActiveTab('personal')} className={`segment-btn ${activeTab === 'personal' ? 'active-tab' : 'inactive-tab'}`}>養成日記</div>
+                            <div onClick={() => setActiveTab('work')} className={`segment-btn ${activeTab === 'work' ? 'active-tab' : 'inactive-tab'}`}>工作記帳</div>
+                        </div>
+
+                        {activeTab === 'personal' && (
+                            <div className="space-y-6 animate-fade-in">
+                                <div className="bg-gradient-to-br from-[#778DA9] to-[#415A77] rounded-2xl p-6 text-white shadow-ios relative overflow-hidden">
+                                    <div className="flex justify-between items-start mb-2 relative z-10">
+                                        <span className="text-xs font-bold opacity-80 uppercase tracking-widest">本月結餘</span>
+                                        <div className="flex items-center gap-2 bg-white/10 px-2 py-1 rounded-lg backdrop-blur-sm">
+                                            <span className="text-xs opacity-70">目標</span>
+                                            <input type="number" value={target} onChange={(e) => setTarget(e.target.value)} className="w-16 bg-transparent text-right text-xs font-bold outline-none text-white" />
+                                        </div>
+                                    </div>
+                                    <div className={`text-4xl font-rounded font-bold mb-4 tracking-tight relative z-10 ${monthlySavings < 0 ? 'text-red-200' : ''}`}>${fmt(monthlySavings)}</div>
+                                    <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white opacity-10 rounded-full"></div>
+                                </div>
+
+                                <div>
+                                    <InputStack 
+                                        title={`薪資收入 (本月: $${fmt(totalIncome)})`}
+                                        inputs={[
+                                            { key: 'date', label: '入帳日期' },
+                                            { key: 'note', placeholder: '備註 (如: 6月薪水)', label: '項目名稱' },
+                                            { key: 'amount', placeholder: '$ 金額', type: 'number', label: '金額', inputClass: 'font-bold text-green-700' }
+                                        ]}
+                                        onAdd={(v) => addTransaction('income', v)}
+                                        btnColor="bg-ios-green"
+                                    />
+                                    {incomeList.length > 0 && (
+                                        <div className="bg-white rounded-xl px-4 py-2 mb-4">
+                                            {incomeList.map(t => <ListItem key={t.id} item={t} onDelete={removeTransaction} />)}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="ios-card">
+                                    <div className="ios-header"><span className="ios-header-title">本月固定支出 (${fmt(totalFixed)})</span></div>
+                                    <div>
+                                        <div className="flex justify-between items-center p-3 border-b border-gray-100">
+                                            <div className="flex items-center gap-2 text-morandi-pink font-bold text-sm"><i className="fa-solid fa-heart"></i> 還77寶貝</div>
+                                            <input type="number" value={fixedSettings.baby} onChange={e => setFixedSettings({...fixedSettings, baby: Number(e.target.value)})} className="text-right w-24 outline-none font-bold text-gray-700 bg-transparent" />
+                                        </div>
+                                        <div className="flex justify-between items-center p-3 border-b border-gray-100">
+                                            <div className="flex items-center gap-2 text-gray-600 font-bold text-sm"><i className="fa-solid fa-credit-card"></i> 信用卡</div>
+                                            <input type="number" value={fixedSettings.credit} onChange={e => setFixedSettings({...fixedSettings, credit: Number(e.target.value)})} className="text-right w-24 outline-none font-bold text-gray-700 bg-transparent" />
+                                        </div>
+                                        <div className="flex bg-gray-50 p-3 text-xs text-gray-400 justify-between text-center">
+                                            <span className="flex-1">車貸 ${fmt(fixedSettings.car)}</span>
+                                            <span className="flex-1 border-l border-gray-200">房租 ${fmt(fixedSettings.rent)}</span>
+                                            <span className="flex-1 border-l border-gray-200">機車 ${fmt(fixedSettings.bike)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <InputStack 
+                                        title={`每日支出明細 (本月: $${fmt(totalDaily)})`}
+                                        inputs={[
+                                            { key: 'date', label: '日期' },
+                                            { key: 'name', placeholder: '消費項目', label: '項目' },
+                                            { key: 'amount', placeholder: '$ 金額', type: 'number', label: '金額' }
+                                        ]}
+                                        onAdd={(v) => addTransaction('daily', v)}
+                                    />
+                                    {dailyList.length > 0 ? (
+                                        <div className="bg-white rounded-xl px-4 py-2 mb-4">
+                                            {dailyList.map(t => <ListItem key={t.id} item={t} onDelete={removeTransaction} isNegative />)}
+                                        </div>
+                                    ) : <div className="text-center text-xs text-gray-400 mb-4">本月無支出</div>}
+                                </div>
+
+                                <div className="bg-white rounded-xl p-4 shadow-sm mb-8 h-64">
+                                    <canvas ref={canvasRef}></canvas>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'work' && (
+                            <div className="space-y-6 animate-fade-in">
+                                <div className="bg-white rounded-2xl p-6 shadow-ios text-center border border-gray-100">
+                                    <p className="text-gray-400 text-xs font-bold uppercase mb-2">本月工作帳戶餘額</p>
+                                    <div className={`text-4xl font-rounded font-bold mb-2 ${workBalance < 0 ? 'text-red-500' : 'text-gray-800'}`}>${fmt(workBalance)}</div>
+                                </div>
+
+                                <div>
+                                    <InputStack 
+                                        title={`資金入帳 (本月: ${fmt(totalDadDeposit)})`}
+                                        inputs={[
+                                            { key: 'date', label: '入帳日期' },
+                                            { key: 'note', placeholder: '備註 (如: 爸爸寄存)', label: '來源備註' },
+                                            { key: 'amount', placeholder: '$ 金額', type: 'number', label: '金額', inputClass: 'text-ios-blue font-bold' }
+                                        ]}
+                                        onAdd={(v) => addTransaction('dad', v)}
+                                        btnColor="bg-ios-blue"
+                                    />
+                                    {dadList.length > 0 && (
+                                        <div className="bg-white rounded-xl px-4 py-2 mb-4">
+                                            {dadList.map(t => <ListItem key={t.id} item={t} onDelete={removeTransaction} />)}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div>
+                                    {/* 專用工資輸入組件 */}
+                                    <WorkWageForm 
+                                        title={`工資支出 (本月: ${fmt(totalWorkExp)})`}
+                                        onAdd={(v) => addTransaction('work', v)}
+                                    />
+                                    {workList.length > 0 ? (
+                                        <div className="bg-white rounded-xl px-4 py-2 mb-10">
+                                            {workList.map(t => (
+                                                <ListItem key={t.id} item={t} onDelete={removeTransaction} isNegative subtitle={<span className="bg-gray-100 text-gray-500 text-[10px] px-2 py-0.5 rounded">{t.days} 工</span>} />
+                                            ))}
+                                        </div>
+                                    ) : <div className="text-center text-xs text-gray-400 mb-10">本月無工資紀錄</div>}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
